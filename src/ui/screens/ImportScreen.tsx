@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { UNCATEGORISED } from '../../domain/types'
 import type { DragEvent } from 'react'
 import { Link } from 'react-router-dom'
@@ -44,15 +44,32 @@ export default function ImportScreen() {
   const [notices, setNotices] = useState<string[]>([])
   const [added, setAdded] = useState<number | null>(null)
 
-  const notify = (msg: string) => setNotices(n => [...n, msg])
+  const mounted = useRef(true)
+  const running = useRef(false)
+  const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
+
+  useEffect(() => {
+    mounted.current = true
+    const q = queue.current
+    return () => {
+      mounted.current = false
+      running.current = false
+      q.length = 0
+    }
+  }, [])
+
+  const notify = (msg: string) => { if (mounted.current) setNotices(n => [...n, msg]) }
 
   async function next(): Promise<void> {
+    if (!mounted.current) return
     const file = queue.current.shift()
     setPreview(null)
     setData(null)
     setWrong(false)
     setPassword('')
     if (!file) {
+      running.current = false
       setStage('idle')
       setName('')
       return
@@ -66,6 +83,7 @@ export default function ImportScreen() {
       notify(`${file.name}: ${e instanceof Error ? e.message : 'could not read file'}`)
       return next()
     }
+    if (!mounted.current) return
     await attempt(file.name, buf)
   }
 
@@ -74,9 +92,11 @@ export default function ImportScreen() {
     try {
       const items = await extractTextItems(buf, pw)
       const p = await previewImport(parseStatement(items))
+      if (!mounted.current) return
       setPreview(p)
       setStage('preview')
     } catch (e) {
+      if (!mounted.current) return
       if (e instanceof PasswordRequiredError || e instanceof WrongPasswordError) {
         setData(buf)
         setWrong(e instanceof WrongPasswordError)
@@ -95,10 +115,11 @@ export default function ImportScreen() {
   function enqueue(files: FileList | File[] | null) {
     const list = Array.from(files ?? [])
     if (list.length === 0) return
-    const idle = stage === 'idle'
     queue.current.push(...list)
+    if (running.current) return
+    running.current = true
     setAdded(null)
-    if (idle) void next()
+    void next()
   }
 
   function submitPassword() {
@@ -108,12 +129,17 @@ export default function ImportScreen() {
   }
 
   async function doImport() {
-    if (!preview) return
+    if (!preview || busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
     try {
       const { added: n } = await commitImport(preview)
-      setAdded(n)
+      if (mounted.current) setAdded(a => (a ?? 0) + n)
     } catch (e) {
       notify(`${name}: Import failed (${e instanceof Error ? e.message : 'unknown error'}).`)
+    } finally {
+      busyRef.current = false
+      if (mounted.current) setBusy(false)
     }
     await next()
   }
@@ -145,7 +171,7 @@ export default function ImportScreen() {
       {notices.map((n, i) => <p key={i} role="alert" className="notice">{n}</p>)}
       {added !== null && (
         <p role="status">
-          <span>{`Added ${added} transactions`}</span>
+          <span>{`Added ${added} ${added === 1 ? 'transaction' : 'transactions'}`}</span>
           {uncategorised > 0 && <> {'—'} <Link to="/sort">Sort {uncategorised} uncategorised</Link></>}
         </p>
       )}
@@ -192,8 +218,8 @@ export default function ImportScreen() {
               </div>
             )
           })}
-          <button type="button" onClick={() => void doImport()}>Import</button>
-          <button type="button" onClick={() => void next()}>Skip</button>
+          <button type="button" disabled={busy} onClick={() => void doImport()}>Import</button>
+          <button type="button" disabled={busy} onClick={() => void next()}>Skip</button>
         </section>
       )}
     </>

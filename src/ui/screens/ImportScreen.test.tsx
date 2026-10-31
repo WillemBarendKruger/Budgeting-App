@@ -111,4 +111,32 @@ describe('ImportScreen', () => {
     expect(await screen.findByText(/2026-01-03/)).toBeInTheDocument()
     expect(screen.getByText(/balance mismatch/i)).toBeInTheDocument()
   })
+
+  it('ignores a double click on Import: one commit, one message', async () => {
+    vi.mocked(extractTextItems).mockResolvedValue([])
+    vi.mocked(parseStatement).mockReturnValue(statement)
+    setup()
+    upload(screen.getByLabelText(/choose pdf/i), pdf())
+    const btn = await screen.findByRole('button', { name: 'Import' })
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+    expect(await screen.findByText('Added 3 transactions')).toBeInTheDocument()
+    expect(await db.transactions.count()).toBe(3)
+    expect(screen.queryByText(/Added 0/)).toBeNull()
+  })
+
+  it('reports unverifiable balances when nothing could be checked', async () => {
+    vi.mocked(extractTextItems).mockResolvedValue([])
+    const none: ParsedStatement = {
+      ...statement,
+      accounts: [{
+        ...statement.accounts[0], openingBalance: undefined, closingBalance: undefined,
+        rows: [{ postedDate: '2026-01-02', date: '2026-01-02', description: 'Shop', amount: -100, warnings: [] }],
+      }],
+    }
+    vi.mocked(parseStatement).mockReturnValue(none)
+    setup()
+    upload(screen.getByLabelText(/choose pdf/i), pdf())
+    expect(await screen.findByText(/verify balances/)).toBeInTheDocument()
+  })
 })
