@@ -28,6 +28,10 @@ describe('seed', () => {
     expect(await db.rules.count()).toBe(7)
     expect((await db.settings.get('settings'))?.fallbackPayday).toBe(25)
   })
+
+  it("seeds the 'payment to discovery' transfer pattern (final review I2b)", async () => {
+    expect((await db.settings.get('settings'))?.transferPatterns).toContain('payment to discovery')
+  })
 })
 
 describe('import', () => {

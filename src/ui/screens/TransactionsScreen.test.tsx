@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../db/db'
 import { seedIfEmpty } from '../../db/seed'
 import { makeTx } from '../../engine/testHelpers'
@@ -113,5 +113,38 @@ describe('SortScreen', () => {
     setup('/sort')
     expect(await screen.findByText('Everything is sorted')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /overview/i })).toBeInTheDocument()
+  })
+})
+
+describe('SortScreen transfer action (final review I2c)', () => {
+  it('"Not spending (transfer)" makes a transfer rule for the payee and removes it from Sort', async () => {
+    await db.transactions.bulkAdd([
+      makeTx({ id: 't1', payee: 'Invented Savings Move', amount: -200000, groupId: 'uncategorised' }),
+      makeTx({ id: 't2', payee: 'Invented Savings Move', amount: -100000, groupId: 'uncategorised' }),
+      makeTx({ id: 'x', payee: 'Small Shop', amount: -100, groupId: 'uncategorised' }),
+    ])
+    setup('/sort')
+    const rows = await screen.findAllByTestId('sort-row')
+    expect(rows).toHaveLength(2)
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Not spending (transfer)' }))
+    await waitFor(() => expect(screen.getAllByTestId('sort-row')).toHaveLength(1))
+    const rules = await db.rules.toArray()
+    expect(rules).toHaveLength(1)
+    expect(rules[0]).toMatchObject({ matchType: 'equals', pattern: 'Invented Savings Move', kind: 'transfer' })
+    expect(await db.transactions.get('t2')).toMatchObject({ kind: 'transfer', groupId: null })
+  })
+
+  it('shows a save error via role=alert', async () => {
+    await db.transactions.bulkAdd([makeTx({ id: 't1', payee: 'Invented Savings Move', amount: -200000, groupId: 'uncategorised' })])
+    setup('/sort')
+    const row = await screen.findByTestId('sort-row')
+    const spy = vi.spyOn(db.rules, 'add').mockImplementation(() => Promise.reject(new Error('Disk full (invented)')))
+    try {
+      fireEvent.click(within(row).getByRole('button', { name: 'Not spending (transfer)' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('Disk full (invented)')
+    } finally {
+      spy.mockRestore()
+    }
+    expect(await db.rules.count()).toBe(0)
   })
 })

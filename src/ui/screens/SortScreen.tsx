@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { setGroup } from '../../db/actions'
+import { setGroup, setKind } from '../../db/actions'
 import { UNCATEGORISED } from '../../domain/types'
 import GroupPicker from '../components/GroupPicker'
 import MoneyText from '../components/MoneyText'
@@ -11,9 +11,16 @@ interface PayeeRow { payee: string; firstId: string; count: number; total: numbe
 export default function SortScreen() {
   const { txs, ready } = useAll()
   const [error, setError] = useState('')
+  const fail = (e: unknown) => setError(e instanceof Error ? e.message : 'Could not save')
   const sort = (id: string, g: string) => {
     setError('')
-    setGroup(id, g, true).catch(e => setError(e instanceof Error ? e.message : 'Could not save'))
+    setGroup(id, g, true).catch(fail)
+  }
+  // Own-account moves (e.g. to savings) aren't spending: a payee rule with kind 'transfer'
+  // also lets the other account's matching credit pair up and leave In.
+  const markTransfer = (id: string) => {
+    setError('')
+    setKind(id, 'transfer', { applyToAll: true }).catch(fail)
   }
   const rows = useMemo(() => {
     const byPayee = new Map<string, PayeeRow>()
@@ -41,7 +48,7 @@ export default function SortScreen() {
   return (
     <>
       <h1>Sort</h1>
-      <p className="muted">Pick a group once and it applies to every transaction from that payee, now and on future imports.</p>
+      <p className="muted">Pick a group once and it applies to every transaction from that payee, now and on future imports. Money moved between your own accounts isn&apos;t spending: mark it as a transfer.</p>
       {error && <p className="notice" role="alert">{error}</p>}
       <ul className="group-list">
         {rows.map(r => (
@@ -51,6 +58,7 @@ export default function SortScreen() {
             </span>
             <MoneyText cents={r.total} colourBySign />
             <GroupPicker value="" onChange={g => sort(r.firstId, g)} />
+            <button type="button" onClick={() => markTransfer(r.firstId)}>Not spending (transfer)</button>
           </li>
         ))}
       </ul>

@@ -33,6 +33,7 @@ const RULES: [string, string][] = [
 
 export const DEFAULT_TRANSFER_PATTERNS = [
   'payment to credit card',
+  'payment to discovery',
   'magtape debit discbank',
   '^discbank',
   '^fnb card$',
