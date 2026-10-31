@@ -74,26 +74,27 @@ export function payMonths(txs: Transaction[], s: Settings, today: string): PayMo
     if (t.date < earliest) earliest = t.date
     if (t.date > latest) latest = t.date
   }
-  const bound = today > latest ? today : latest
-
-  const candidates = fallbackDates(earliest, bound, s.fallbackPayday)
+  const candidates = fallbackDates(earliest, latest, s.fallbackPayday)
   const fills = candidates.filter(c => {
     if (salary.length === 0) return true
     if (salary.some(d => Math.abs(daysBetween(d, c)) < MIN_SPACING_DAYS)) return false
     const first = salary[0]
     const last = salary[salary.length - 1]
-    if (c < first) return true
-    if (c > last) return daysBetween(last, bound) > MAX_GAP_DAYS
+    if (c < first) return earliest < first
+    if (c > last) return daysBetween(last, latest) > MAX_GAP_DAYS
     const prev = [...salary].reverse().find(d => d < c)!
     const next = salary.find(d => d > c)!
     return daysBetween(prev, next) > MAX_GAP_DAYS
   })
 
   const starts = [...new Set([...salary, ...fills])].sort()
+  // Coverage invariant: the earliest tx must fall inside a month.
+  if (earliest < starts[0]) starts.unshift(candidates[0])
+  const end = today > latest ? today : latest
   const months = starts.map((start, i) => {
     const next = starts[i + 1]
-    const end = next ? addDays(next, -1) : today > start ? today : start
-    return { start, end, label: label(start, end) }
+    const e = next ? addDays(next, -1) : end
+    return { start, end: e, label: label(start, e) }
   })
   return months.reverse()
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { payMonths, payMonthFor, suggestSalaryPattern } from './payMonths'
 import { makeTx } from './testHelpers'
+import { addDays } from '../domain/dates'
 import type { Settings } from '../domain/types'
 
 const settings = (over: Partial<Settings> = {}): Settings => ({
@@ -117,5 +118,43 @@ describe('suggestSalaryPattern', () => {
   })
   it('ignores same-month repeats', () => {
     expect(suggestSalaryPattern([pay('2026-06-01'), pay('2026-06-20')])).toBeUndefined()
+  })
+})
+
+describe('coverage invariant', () => {
+  it('06-27 regression: earliest tx just before first salary is covered', () => {
+    const txs = [makeTx({ date: '2026-06-27' }), pay('2026-06-30')]
+    const ms = payMonths(txs, settings(), '2026-07-05')
+    expect(payMonthFor('2026-06-27', ms)).toBeDefined()
+    expect(ms.map(m => m.start)).toEqual(['2026-06-30', '2026-06-25'])
+  })
+
+  it('adds no leading month when earliest is the first salary', () => {
+    const ms = payMonths([pay('2026-06-30'), pay('2026-07-31')], settings(), '2026-08-01')
+    expect(ms.map(m => m.start)).toEqual(['2026-07-31', '2026-06-30'])
+  })
+
+  it('does not generate empty months up to a far-future today', () => {
+    const ms = payMonths([pay('2026-06-30'), pay('2026-07-31')], settings(), '2027-03-01')
+    expect(ms[0]).toMatchObject({ start: '2026-07-31', end: '2027-03-01' })
+    expect(ms).toHaveLength(2)
+  })
+
+  const cases: Array<[string, ReturnType<typeof makeTx>[], Partial<Settings>, string]> = [
+    ['salary present', [pay('2026-06-30'), pay('2026-07-31'), makeTx({ date: '2026-07-04' })], {}, '2026-08-10'],
+    ['no salary pattern', [makeTx({ date: '2026-03-03' }), makeTx({ date: '2026-06-20' })], { salaryPattern: undefined }, '2026-06-21'],
+    ['earliest just before first salary', [makeTx({ date: '2026-06-27' }), pay('2026-06-30')], {}, '2026-07-02'],
+    ['gap over 40 days', [pay('2026-01-05'), pay('2026-05-20'), makeTx({ date: '2026-05-22' })], {}, '2026-05-25'],
+    ['fallback 31', [makeTx({ date: '2027-01-15' }), pay('2027-03-05'), makeTx({ date: '2027-05-01' })], { fallbackPayday: 31 }, '2027-05-02'],
+    ['tx after today', [pay('2026-06-30'), makeTx({ date: '2026-09-15' })], {}, '2026-08-01'],
+    ['salary within 10 days of fallback', [makeTx({ date: '2026-06-26' }), pay('2026-06-29'), pay('2026-07-29')], {}, '2026-08-01'],
+  ]
+  it.each(cases)('%s: every date in exactly one contiguous month', (_n, txs, over, today) => {
+    const ms = payMonths(txs, settings(over), today)
+    const asc = [...ms].reverse()
+    for (let i = 1; i < asc.length; i++) expect(asc[i].start).toBe(addDays(asc[i - 1].end, 1))
+    for (const m of ms) expect(m.end >= m.start).toBe(true)
+    const dates = [...txs.map(t => t.date), today].filter(d => d >= txs.map(t => t.date).sort()[0])
+    for (const d of dates) expect(ms.filter(m => d >= m.start && d <= m.end)).toHaveLength(1)
   })
 })
