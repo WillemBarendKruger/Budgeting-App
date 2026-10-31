@@ -81,9 +81,79 @@ describe('parseDiscovery', () => {
   })
 
   it('balances check out, and a tampered amount is caught', () => {
-    for (const a of st.accounts) expect(checkBalances(a)).toEqual({ ok: true, badRows: [] })
+    for (const a of st.accounts) expect(checkBalances(a)).toMatchObject({ ok: true, badRows: [] })
     const bad = structuredClone(st.accounts[0])
     bad.rows[2].amount += 1
-    expect(checkBalances(bad)).toEqual({ ok: false, badRows: [2] })
+    expect(checkBalances(bad)).toMatchObject({ ok: false, badRows: [2] })
+  })
+
+  it('flags a summary closing balance that disagrees with the last row', () => {
+    const tampered = items.map((i) => (i.str === 'R 100.00' && i.page === 1 ? { ...i, str: 'R 101.00' } : i))
+    const sv = parseDiscovery(tampered).accounts[1]
+    expect(sv.closingBalance).toBe(10100)
+    expect(checkBalances(sv).ok).toBe(false)
+  })
+})
+
+describe('parseDiscovery edge cases', () => {
+  const base = (page3: ReturnType<typeof row>) => [
+    ...summaryHeader(1, 700),
+    ...row(1, 680, [[53, 'Credit Card Account'], [250, '10000001234'], right(543, 'R 50.00-')]),
+    ...top(2, 790, 'Credit Card Account', '10000001234'),
+    ...discoveryHeader(2, 740),
+    ...tx(2, 720, '2026-01-03', 'FNB CARD', 'debit', 'R 50.00', 'R 50.00-'),
+    ...footer(2),
+    ...page3,
+  ]
+
+  it('continues the account on a page with no table header row', () => {
+    const st = parseDiscovery(base([...tx(3, 760, '2026-01-20', 'Coffee Shop', 'debit', 'R 10.00', 'R 60.00-'), ...footer(3)]))
+    expect(st.accounts[0].rows.map((r) => r.description)).toEqual(['FNB CARD', 'Coffee Shop'])
+    expect(st.accounts[0].rows[1].amount).toBe(-1000)
+  })
+
+  it('warns when date-first lines appear before any table header', () => {
+    const st = parseDiscovery([...tx(1, 760, '2026-01-20', 'Orphan', 'debit', 'R 10.00', 'R 10.00-')])
+    expect(st.warnings.some((w) => /no table header/.test(w))).toBe(true)
+  })
+
+  it('warns about summary accounts without a section and sections without a summary entry', () => {
+    const st = parseDiscovery([
+      ...summaryHeader(1, 700),
+      ...row(1, 680, [[53, 'Savings Account'], [250, '10000005678'], right(543, 'R 100.00')]),
+      ...top(2, 790, 'Credit Card Account', '10000001234'),
+      ...discoveryHeader(2, 740),
+      ...tx(2, 720, '2026-01-03', 'FNB CARD', 'debit', 'R 50.00', 'R 50.00-'),
+    ])
+    expect(st.warnings).toContain('Account ending 1234 has no closing balance in the summary')
+    expect(st.warnings).toContain('Summary account ending 5678 has no account section')
+  })
+
+  it('adds row warnings for a missing balance and for both debit and credit', () => {
+    const st = parseDiscovery(
+      base([
+        ...discoveryHeader(3, 760),
+        ...row(3, 740, [[53, '2026-01-21'], [120, 'No bal'], right(425, 'R 5.00')]),
+        ...row(3, 726, [[53, '2026-01-22'], [120, 'Both'], right(425, 'R 5.00'), right(478, 'R 7.00'), right(543, 'R 52.00-')]),
+      ]),
+    )
+    const [, noBal, both] = st.accounts[0].rows
+    expect(noBal.balance).toBeUndefined()
+    expect(noBal.warnings).toContain('No balance found')
+    expect(both.warnings).toContain('Both debit and credit present')
+  })
+
+  it('appends wrapped description lines to the previous row, but never footer lines', () => {
+    const st = parseDiscovery(
+      base([
+        ...discoveryHeader(3, 760),
+        ...tx(3, 740, '2026-01-21', 'Long merchant name', 'debit', 'R 10.00', 'R 60.00-'),
+        ...row(3, 728, [[120, 'continued here']]),
+        ...footer(3),
+      ]),
+    )
+    const rows = st.accounts[0].rows
+    expect(rows[1].description).toBe('Long merchant name continued here')
+    expect(rows.map((r) => r.description).join('|')).not.toMatch(/Sample Street|VAT/)
   })
 })

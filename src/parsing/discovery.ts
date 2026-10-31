@@ -1,6 +1,6 @@
 import type { AccountRole, ParsedAccount, ParsedRow, ParsedStatement, TextItem } from '../domain/types'
 import { parseRand } from '../domain/money'
-import { assignColumns, findHeader, groupLines, lineText } from './layout'
+import { assignColumns, findHeader, groupLines, lineText, type Column } from './layout'
 
 const HEADER_LABELS = ['Date', 'Description', 'Debit', 'Credit', 'Balance']
 const SUMMARY_LABELS = ['Account Type', 'Account Number', 'Balance']
@@ -21,11 +21,18 @@ export function parseDiscovery(items: TextItem[]): ParsedStatement {
   let periodStart = ''
   let periodEnd = ''
   let current: ParsedAccount | undefined
+  let lastColumns: Column[] | undefined // table header seen most recently; reused on continuation pages
+  let lastRow: { row: ParsedRow; page: number; y: number } | undefined
+  // A wrapped description line sits close under its row; footers are far below.
+  const WRAP_MAX_GAP = 20
 
   for (const page of new Set(lines.map((l) => l.page))) {
     const pageLines = lines.filter((l) => l.page === page)
     const tableHeader = findHeader(pageLines, HEADER_LABELS)
     const summaryHeader = findHeader(pageLines, SUMMARY_LABELS)
+    if (tableHeader) lastColumns = tableHeader.columns
+    const columns = tableHeader?.columns ?? lastColumns
+    let warnedNoHeader = false
 
     pageLines.forEach((line, idx) => {
       const text = lineText(line)
@@ -48,22 +55,49 @@ export function parseDiscovery(items: TextItem[]): ParsedStatement {
         return
       }
 
-      if (!tableHeader || idx <= tableHeader.index) return
-      if (!ISO_DATE.test(line.items[0].str.trim())) return // footer / address / stray text
+      if (tableHeader && idx <= tableHeader.index) return
+      const dateFirst = ISO_DATE.test(line.items[0].str.trim())
+      if (!columns) {
+        if (dateFirst && !warnedNoHeader) {
+          warnings.push(`Page ${page}: transaction-like lines found but no table header seen yet`)
+          warnedNoHeader = true
+        }
+        return
+      }
+      if (!dateFirst) {
+        // Possible wrapped description: only Description-column text, starting inside that column,
+        // right under the previous row. Footer lines fail the x and distance checks.
+        const cells = assignColumns(line, columns)
+        const descCol = columns.find((c) => c.label === 'Description')
+        if (
+          lastRow && lastRow.page === page && lastRow.y - line.y <= WRAP_MAX_GAP &&
+          descCol && line.items[0].x >= descCol.x0 - 2 &&
+          Object.keys(cells).length === 1 && cells.Description
+        ) {
+          lastRow.row.description = `${lastRow.row.description} ${cells.Description.trim()}`.trim()
+          lastRow.y = line.y
+        }
+        return
+      }
 
       if (!current) {
         warnings.push(`Transaction row before any account section: "${text}"`)
         return
       }
-      const cells = assignColumns(line, tableHeader.columns)
+      const cells = assignColumns(line, columns)
       const date = (cells.Date ?? '').trim()
       const row: ParsedRow = {
         postedDate: date, date, description: (cells.Description ?? '').trim(), amount: 0, warnings: [],
       }
-      if (cells.Debit) row.amount = -Math.abs(parseRand(cells.Debit))
+      if (cells.Debit && cells.Credit) {
+        row.amount = Math.abs(parseRand(cells.Credit)) - Math.abs(parseRand(cells.Debit))
+        row.warnings.push('Both debit and credit present')
+      } else if (cells.Debit) row.amount = -Math.abs(parseRand(cells.Debit))
       else if (cells.Credit) row.amount = Math.abs(parseRand(cells.Credit))
       else row.warnings.push('No debit or credit amount found')
       if (cells.Balance) row.balance = parseRand(cells.Balance)
+      else row.warnings.push('No balance found')
+      lastRow = { row, page, y: line.y }
       current.rows.push(row)
     })
   }
@@ -71,6 +105,11 @@ export function parseDiscovery(items: TextItem[]): ParsedStatement {
   for (const acc of accounts) {
     const closing = summary.get(fullNumbers.get(acc) ?? '')
     if (closing !== undefined) acc.closingBalance = closing
+    else warnings.push(`Account ending ${acc.last4} has no closing balance in the summary`)
+  }
+  const sectionNumbers = new Set(fullNumbers.values())
+  for (const number of summary.keys()) {
+    if (!sectionNumbers.has(number)) warnings.push(`Summary account ending ${number.slice(-4)} has no account section`)
   }
   if (!periodStart) warnings.push('Statement period (From/To) not found')
   if (accounts.length === 0) warnings.push('No accounts found')
