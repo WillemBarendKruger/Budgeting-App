@@ -4,7 +4,11 @@ import { matchesTransferPattern, pairTransfers } from './transfers';
 
 /** Re-derives kind/group for every non-manual transaction. Returns new objects; inputs are untouched. */
 export function recategorise(txs: Transaction[], rules: Rule[], patterns: string[]): Transaction[] {
-  const pairs = pairTransfers(txs.filter((t) => !t.setManually), patterns);
+  // Manual txs and txs whose rule sets a kind are decided elsewhere; they never take part in pairing.
+  const pairs = pairTransfers(
+    txs.filter((t) => !t.setManually && matchRule(t, rules)?.kind === undefined),
+    patterns,
+  );
 
   return txs.map((tx) => {
     if (tx.setManually) return tx;
@@ -30,15 +34,12 @@ export function recategorise(txs: Transaction[], rules: Rule[], patterns: string
       if (rule.reimbursesGroupId !== undefined) reimbursesGroupId = rule.reimbursesGroupId;
     }
 
-    if (kind === 'expense') {
-      groupId = groupId ?? UNCATEGORISED;
-    } else if (kind !== 'reimbursement') {
-      groupId = null;
-    }
+    if (kind === 'expense') groupId = groupId ?? UNCATEGORISED;
+    else groupId = null;
 
     const out: Transaction = { ...rest, kind, groupId };
-    if (reimbursesGroupId !== undefined) out.reimbursesGroupId = reimbursesGroupId;
-    if (transferPairId !== undefined) out.transferPairId = transferPairId;
+    if (kind === 'reimbursement' && reimbursesGroupId !== undefined) out.reimbursesGroupId = reimbursesGroupId;
+    if (kind === 'transfer' && transferPairId !== undefined) out.transferPairId = transferPairId;
     return out;
   });
 }

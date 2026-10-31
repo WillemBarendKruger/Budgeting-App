@@ -69,3 +69,38 @@ describe('recategorise', () => {
     expect(JSON.stringify(t)).toBe(snap);
   });
 });
+
+describe('recategorise fix round 1', () => {
+  it('reimbursement never carries groupId', () => {
+    const rule: Rule = { id: 'r', matchType: 'contains', pattern: 'payer', kind: 'reimbursement', groupId: 'x', reimbursesGroupId: 'y', createdAt: 1 };
+    const [r] = recategorise([makeTx({ payee: 'Invented Payer', amount: 100 })], [rule], patterns);
+    expect(r.groupId).toBeNull();
+    expect(r.reimbursesGroupId).toBe('y');
+  });
+
+  it('reimbursesGroupId only emitted for reimbursement kind', () => {
+    const rule: Rule = { id: 'r', matchType: 'contains', pattern: 'grocer', reimbursesGroupId: 'y', createdAt: 1 };
+    const [r] = recategorise([makeTx()], [rule], patterns);
+    expect(r.kind).toBe('expense');
+    expect('reimbursesGroupId' in r).toBe(false);
+  });
+
+  it('rule kind excludes a tx from pairing', () => {
+    const rule: Rule = { id: 'r', matchType: 'equals', pattern: 'Ruled Payee', kind: 'expense', createdAt: 1 };
+    const a = makeTx({ id: 'a', accountId: 'x', payee: 'Ruled Payee', amount: -100, description: 'FNB App Payment To Credit Card' });
+    const b = makeTx({ id: 'b', accountId: 'y', payee: 'Other', amount: 100, description: 'FNB CARD' });
+    const [ra, rb] = recategorise([a, b], [rule], patterns);
+    expect(ra.kind).toBe('expense');
+    expect(ra.transferPairId).toBeUndefined();
+    expect(rb.kind).toBe('transfer');
+    expect(rb.transferPairId).toBeUndefined();
+  });
+
+  it('is idempotent', () => {
+    const a = makeTx({ id: 'a', accountId: 'x', amount: -100, description: 'FNB App Payment To Credit Card' });
+    const b = makeTx({ id: 'b', accountId: 'y', amount: 100, description: 'FNB CARD' });
+    const c = makeTx({ id: 'c' });
+    const once = recategorise([a, b, c], [], patterns);
+    expect(recategorise(once, [], patterns)).toEqual(once);
+  });
+});

@@ -48,3 +48,12 @@ describe('matchRule', () => {
     expect(matchRule(tx, [])).toBeUndefined();
   });
 });
+
+describe('matchRule determinism', () => {
+  it('full ties are broken by id regardless of order', () => {
+    const tx = makeTx({ payee: 'Invented Grocer' });
+    const a = rule({ id: 'a', matchType: 'contains', pattern: 'grocer' });
+    const b = rule({ id: 'b', matchType: 'contains', pattern: 'grocer' });
+    expect(matchRule(tx, [a, b])?.id).toBe(matchRule(tx, [b, a])?.id);
+  });
+});

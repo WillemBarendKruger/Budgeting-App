@@ -45,3 +45,17 @@ describe('pairTransfers', () => {
     expect(pairTransfers([out(), inn()], ['(', 'fnb card']).get('out')).toBe('in');
   });
 });
+
+describe('pairTransfers determinism', () => {
+  it('shuffled input yields the same pairing', () => {
+    const o1 = out({ id: 'o1' });
+    const o2 = out({ id: 'o2' });
+    const i1 = inn({ id: 'i1' });
+    const i2 = inn({ id: 'i2' });
+    const orders = [[o1, o2, i1, i2], [i2, i1, o2, o1], [o2, i1, o1, i2]];
+    const results = orders.map((o) => [...pairTransfers(o, patterns).entries()].sort());
+    expect(results[1]).toEqual(results[0]);
+    expect(results[2]).toEqual(results[0]);
+    expect(results[0].length).toBe(4);
+  });
+});

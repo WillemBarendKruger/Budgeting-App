@@ -38,5 +38,6 @@ function compare(a: Rule, b: Rule): number {
   const eb = b.matchType === 'equals' ? 1 : 0;
   if (ea !== eb) return ea - eb;
   if (a.pattern.length !== b.pattern.length) return a.pattern.length - b.pattern.length;
-  return a.createdAt - b.createdAt;
+  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0; // smaller id wins, for determinism
 }
