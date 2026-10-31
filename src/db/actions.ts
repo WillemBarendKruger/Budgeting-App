@@ -5,11 +5,10 @@ import { reapplyRules } from './importService'
 /**
  * Upserts the single `equals` rule for this tx's payee (case-insensitive),
  * clears `setManually` on the tx so the rule applies to it, then re-runs rules.
- * Rules always carry `kind` (even 'expense'): explicitly grouping a previously
- * income/transfer tx turns it into an expense.
  */
 async function upsertPayeeRule(txId: string, fields: Pick<Rule, 'kind' | 'groupId' | 'reimbursesGroupId'>): Promise<void> {
-  await db.transaction('rw', [db.transactions, db.rules], async () => {
+  // Rule upsert and reapply share one transaction: a failure can't leave a saved rule with stale txs.
+  await db.transaction('rw', [db.transactions, db.rules, db.settings], async () => {
     const tx = await db.transactions.get(txId)
     if (!tx) throw new Error(`Transaction not found: ${txId}`)
     const key = tx.payee.toLowerCase()
@@ -21,8 +20,8 @@ async function upsertPayeeRule(txId: string, fields: Pick<Rule, 'kind' | 'groupI
     if (fields.reimbursesGroupId !== undefined) rule.reimbursesGroupId = fields.reimbursesGroupId
     await db.rules.add(rule)
     await db.transactions.update(txId, { setManually: false })
+    await reapplyRules()
   })
-  await reapplyRules()
 }
 
 async function setManual(txId: string, kind: TxKind, groupId: string | null, reimbursesGroupId?: string): Promise<void> {
@@ -38,7 +37,14 @@ async function setManual(txId: string, kind: TxKind, groupId: string | null, rei
 }
 
 export async function setGroup(txId: string, groupId: string, applyToAll = true): Promise<void> {
-  if (applyToAll) return upsertPayeeRule(txId, { kind: 'expense', groupId })
+  if (applyToAll) {
+    // A groupId-only rule leaves the payee's credits/transfers alone (recategorise
+    // only gives groupId to computed expenses). `kind: 'expense'` is added only
+    // when explicitly converting a tx that is not currently an expense.
+    const tx = await db.transactions.get(txId)
+    if (!tx) throw new Error(`Transaction not found: ${txId}`)
+    return upsertPayeeRule(txId, tx.kind === 'expense' ? { groupId } : { kind: 'expense', groupId })
+  }
   return setManual(txId, 'expense', groupId)
 }
 
@@ -47,6 +53,7 @@ export async function setKind(
   kind: TxKind,
   opts: { reimbursesGroupId?: string; applyToAll: boolean },
 ): Promise<void> {
+  if (kind === 'expense' && opts.applyToAll) throw new Error('Use setGroup to create an expense rule')
   if (kind === 'reimbursement' && !opts.reimbursesGroupId) throw new Error('A reimbursement needs the group it reimburses')
   const reimburses = kind === 'reimbursement' ? opts.reimbursesGroupId : undefined
   if (opts.applyToAll) {

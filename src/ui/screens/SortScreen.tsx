@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { setGroup } from '../../db/actions'
 import { UNCATEGORISED } from '../../domain/types'
@@ -10,6 +10,11 @@ interface PayeeRow { payee: string; firstId: string; count: number; total: numbe
 
 export default function SortScreen() {
   const { txs, ready } = useAll()
+  const [error, setError] = useState('')
+  const sort = (id: string, g: string) => {
+    setError('')
+    setGroup(id, g, true).catch(e => setError(e instanceof Error ? e.message : 'Could not save'))
+  }
   const rows = useMemo(() => {
     const byPayee = new Map<string, PayeeRow>()
     for (const t of txs ?? []) {
@@ -37,6 +42,7 @@ export default function SortScreen() {
     <>
       <h1>Sort</h1>
       <p className="muted">Pick a group once and it applies to every transaction from that payee, now and on future imports.</p>
+      {error && <p className="notice" role="alert">{error}</p>}
       <ul className="group-list">
         {rows.map(r => (
           <li key={r.payee} className="group-row" data-testid="sort-row">
@@ -44,7 +50,7 @@ export default function SortScreen() {
               {r.payee} <span className="muted">({r.count})</span>
             </span>
             <MoneyText cents={r.total} colourBySign />
-            <GroupPicker value="" onChange={g => { void setGroup(r.firstId, g, true) }} />
+            <GroupPicker value="" onChange={g => sort(r.firstId, g)} />
           </li>
         ))}
       </ul>

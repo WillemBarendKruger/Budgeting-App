@@ -23,11 +23,32 @@ describe('setGroup', () => {
     await setGroup('a', 'eating-out', true)
     const rules = await db.rules.toArray()
     expect(rules).toHaveLength(1)
-    expect(rules[0]).toMatchObject({ matchType: 'equals', groupId: 'eating-out', kind: 'expense' })
+    expect(rules[0]).toMatchObject({ matchType: 'equals', groupId: 'eating-out' })
     expect((await db.transactions.get('a'))!.groupId).toBe('eating-out')
     expect((await db.transactions.get('b'))!.groupId).toBe('eating-out')
     expect((await db.transactions.get('c'))!.groupId).toBe('eating-out')
     expect((await db.transactions.get('m'))!.groupId).toBe('shopping')
+  })
+
+  it('grouping a purchase leaves the payee refunds and transfers alone', async () => {
+    await db.transactions.bulkAdd([
+      makeTx({ id: 'p', payee: 'Invented Shop', amount: -500 }),
+      makeTx({ id: 'rf', payee: 'Invented Shop', amount: 200 }),
+      makeTx({ id: 'tr', payee: 'Invented Shop', description: 'Inter Account Transfer', amount: -300 }),
+    ])
+    await setGroup('p', 'groceries', true)
+    const rule = (await db.rules.toArray())[0]
+    expect(rule.kind).toBeUndefined()
+    expect(await db.transactions.get('p')).toMatchObject({ kind: 'expense', groupId: 'groceries' })
+    expect(await db.transactions.get('rf')).toMatchObject({ kind: 'income', groupId: null })
+    expect(await db.transactions.get('tr')).toMatchObject({ kind: 'transfer', groupId: null })
+  })
+
+  it('explicitly grouping a non-expense converts it with a kind rule', async () => {
+    await db.transactions.bulkAdd([makeTx({ id: 'i', payee: 'Invented Friend', amount: 900, kind: 'income' })])
+    await setGroup('i', 'groceries', true)
+    expect((await db.rules.toArray())[0].kind).toBe('expense')
+    expect(await db.transactions.get('i')).toMatchObject({ kind: 'expense', groupId: 'groceries' })
   })
 
   it('applyToAll clears setManually on the chosen tx so the rule applies', async () => {
@@ -81,6 +102,12 @@ describe('setKind', () => {
   it('requires a group for reimbursement', async () => {
     await db.transactions.bulkAdd([makeTx({ id: 'r', amount: 900, kind: 'income' })])
     await expect(setKind('r', 'reimbursement', { applyToAll: false })).rejects.toThrow()
+  })
+
+  it('expense with applyToAll throws', async () => {
+    await db.transactions.bulkAdd([makeTx({ id: 'x' })])
+    await expect(setKind('x', 'expense', { applyToAll: true })).rejects.toThrow()
+    expect(await db.rules.count()).toBe(0)
   })
 
   it('non-expense kind drops the group', async () => {
