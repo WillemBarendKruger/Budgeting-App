@@ -1,11 +1,13 @@
 import type { TextItem } from '../domain/types'
 
 export interface Line { page: number; y: number; items: TextItem[] }
-export interface Column { label: string; x0: number; x1: number }
+/** `centre` is the header label's centre (before boundaries are derived); numbers are matched against it. */
+export interface Column { label: string; x0: number; x1: number; centre: number }
 
 /** Group items into visual lines: by page, then y descending (pdf y grows upward); items sorted by x. */
 export function groupLines(items: TextItem[], yTolerance = 2): Line[] {
-  const sorted = [...items].sort((a, b) => a.page - b.page || b.y - a.y)
+  // pdf.js emits whitespace-only items; they are never cells.
+  const sorted = items.filter((i) => i.str.trim() !== '').sort((a, b) => a.page - b.page || b.y - a.y)
   const lines: Line[] = []
   for (const it of sorted) {
     const cur = lines[lines.length - 1]
@@ -52,6 +54,7 @@ export function findHeader(
     found.sort((a, b) => a.x - b.x)
     const columns = found.map((it, i): Column => ({
       label: it.str.trim(),
+      centre: it.x + it.width / 2,
       x0: i === 0 ? 0 : boundary(found[i - 1], it),
       x1: i === found.length - 1 ? Infinity : boundary(it, found[i + 1]),
     }))
@@ -60,9 +63,15 @@ export function findHeader(
   return undefined
 }
 
-const NUMERIC = /^[R\s]*-?[\d,\s]*\.?\d+\s*(Cr|Dr)?$/i
+// Amounts: 'R 1,234.56', '-R 50.00', 'R 50.00-', '5,071.04Cr', '0.50', '-12'.
+const NUMERIC = /^-?(R\s*)?-?[\d,]*\.?\d+\s*(Cr|Dr|-)?$/i
+// A currency marker emitted as its own item, belonging to the amount that follows it.
+const CURRENCY_TOKEN = /^-?R-?$/
 
-function pickColumn(it: TextItem, columns: Column[]): Column {
+const isNumeric = (it: TextItem) => NUMERIC.test(it.str.trim())
+
+/** Text: most horizontal overlap with a column span, else the smallest gap. */
+function pickTextColumn(it: TextItem, columns: Column[]): Column {
   const left = it.x
   const right = it.x + it.width
   let best: Column | undefined
@@ -72,20 +81,41 @@ function pickColumn(it: TextItem, columns: Column[]): Column {
     if (overlap > bestOverlap) { best = c; bestOverlap = overlap }
   }
   if (best) return best
-
-  // No overlap: numbers are right-aligned, so compare right edges; otherwise use the horizontal gap.
-  const isNumber = NUMERIC.test(it.str.trim())
-  const distance = (c: Column) =>
-    isNumber ? Math.abs(right - c.x1) : Math.max(c.x0 - right, left - c.x1, 0)
-  return columns.reduce((a, b) => (distance(b) < distance(a) ? b : a))
+  const gap = (c: Column) => Math.max(c.x0 - right, left - c.x1, 0)
+  return columns.reduce((a, b) => (gap(b) < gap(a) ? b : a))
 }
 
-/** Map a line's items to header columns (most overlap wins); items in one column are joined by a space. */
+/** Numbers are right-aligned, so spans are unreliable; use the column whose header centre is nearest. */
+function pickNumericColumn(it: TextItem, columns: Column[]): Column {
+  const c = it.x + it.width / 2
+  return columns.reduce((a, b) => (Math.abs(b.centre - c) < Math.abs(a.centre - c) ? b : a))
+}
+
+/**
+ * Map a line's items to header columns; items in one column are joined by a space.
+ * Numeric items use the nearest header centre, other items use span overlap, and a standalone
+ * currency marker ('R', '-R', 'R-') follows the next numeric item on the line.
+ */
 export function assignColumns(line: Line, columns: Column[]): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const it of line.items) {
-    const { label } = pickColumn(it, columns)
-    out[label] = label in out ? `${out[label]} ${it.str}` : it.str
+  const add = (label: string, str: string) => { out[label] = label in out ? `${out[label]} ${str}` : str }
+  let pending: TextItem[] = []
+  const flush = () => {
+    for (const p of pending) add(pickTextColumn(p, columns).label, p.str)
+    pending = []
   }
+  for (const it of line.items) {
+    if (CURRENCY_TOKEN.test(it.str.trim())) { pending.push(it); continue }
+    if (isNumeric(it)) {
+      const { label } = pickNumericColumn(it, columns)
+      for (const p of pending) add(label, p.str)
+      pending = []
+      add(label, it.str)
+    } else {
+      flush()
+      add(pickTextColumn(it, columns).label, it.str)
+    }
+  }
+  flush()
   return out
 }

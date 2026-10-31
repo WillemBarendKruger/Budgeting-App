@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoveryHeader, fnbHeader, header, right, row } from '../../tests/fixtures/textItems'
+import { discoveryHeader, fnbHeader, right, row } from '../../tests/fixtures/textItems'
 import { assignColumns, findHeader, groupLines, lineText } from './layout'
 
 const FNB_LABELS = ['Date', 'Description', 'Amount', 'Balance', 'Bank']
@@ -85,7 +85,7 @@ describe('assignColumns (Discovery geometry)', () => {
 
   it('places debit and credit amounts, joining a split R + number', () => {
     const debit = groupLines(
-      row(1, 680, [[53, '12 Jun'], [120, 'Invented Cafe'], [386, 'R'], right(427, '1,234.56'), right(545, '9,000.00')]),
+      row(1, 680, [[53, '12 Jun'], [120, 'Invented Cafe'], [383, 'R'], right(427, '1,234.56'), right(545, '9,000.00')]),
     )[0]
     expect(assignColumns(debit, columns)).toEqual({
       Date: '12 Jun',
@@ -101,22 +101,71 @@ describe('assignColumns (Discovery geometry)', () => {
   })
 })
 
-describe('assignColumns fallback (no overlap)', () => {
+describe('assignColumns fallback (no overlap, caller-supplied columns)', () => {
   const columns = [
-    { label: 'A', x0: 0, x1: 100 },
-    { label: 'B', x0: 200, x1: 300 },
+    { label: 'A', x0: 0, x1: 100, centre: 50 },
+    { label: 'B', x0: 200, x1: 300, centre: 250 },
   ]
 
   it('uses the smallest horizontal gap for text', () => {
-    const line = groupLines(header(1, 10, [[130, 'xx']]))[0] // 125..135: gap 25 to A, 65 to B
-    expect(assignColumns(line, columns)).toEqual({ A: 'xx' })
+    const line = groupLines(row(1, 10, [[150, 'abcdefgh', 40]]))[0] // gap 10 to B, 50 to A
+    expect(assignColumns(line, columns)).toEqual({ B: 'abcdefgh' })
   })
 
-  it('compares right edges for numbers', () => {
-    // 150..190: text would go to B (gap 10 vs 50), but a number's right edge (190) is nearer A.x1 (100) than B.x1 (300)
-    const num = groupLines(row(1, 10, [[150, '1,000.00', 40]]))[0]
-    expect(assignColumns(num, columns)).toEqual({ A: '1,000.00' })
-    const text = groupLines(row(1, 10, [[150, 'abcdefgh', 40]]))[0]
-    expect(assignColumns(text, columns)).toEqual({ B: 'abcdefgh' })
+  it('uses the nearest header centre for numbers', () => {
+    const line = groupLines(row(1, 10, [[150, '1,000.00', 40]]))[0] // centre 170: 120 from A, 80 from B
+    expect(assignColumns(line, columns)).toEqual({ B: '1,000.00' })
+  })
+})
+
+describe('numeric placement tolerates misaligned amounts', () => {
+  const fnb = findHeader(groupLines(fnbHeader(1, 700)), FNB_LABELS)!.columns
+  const disc = findHeader(groupLines(discoveryHeader(1, 700)), DISC_LABELS)!.columns
+  const place = (cols: typeof fnb, edge: number, str: string) =>
+    Object.entries(assignColumns(groupLines(row(1, 5, [right(edge, str)]))[0], cols))[0]
+
+  it.each([-8, 0, 8])('FNB amount, balance and charges shifted by %d', (d) => {
+    expect(place(fnb, 482 + d, '245.39')).toEqual(['Amount', '245.39'])
+    expect(place(fnb, 545 + d, '5,071.04Cr')).toEqual(['Balance', '5,071.04Cr'])
+    expect(place(fnb, 582 + d, '1.00')).toEqual(['Bank', '1.00'])
+  })
+
+  it.each([-8, 0, 8])('Discovery debit, credit and balance shifted by %d', (d) => {
+    expect(place(disc, 427 + d, '1,234.56')).toEqual(['Debit', '1,234.56'])
+    expect(place(disc, 480 + d, '50.00')).toEqual(['Credit', '50.00'])
+    expect(place(disc, 545 + d, '9,000.00')).toEqual(['Balance', '9,000.00'])
+  })
+
+  it('places narrow and wide amounts', () => {
+    expect(place(fnb, 482, '0.50')).toEqual(['Amount', '0.50'])
+    expect(place(disc, 427, '12,345.67')).toEqual(['Debit', '12,345.67'])
+  })
+
+  it('accepts negative and trailing-minus forms', () => {
+    expect(place(disc, 480, '-R 50.00')).toEqual(['Credit', '-R 50.00'])
+    expect(place(disc, 480, 'R 50.00-')).toEqual(['Credit', 'R 50.00-'])
+  })
+})
+
+describe('split currency token', () => {
+  const disc = findHeader(groupLines(discoveryHeader(1, 700)), DISC_LABELS)!.columns
+
+  it.each(['R', '-R', 'R-'])("attaches '%s' to the following wide amount, not Description", (tok) => {
+    const amount = right(427, '12,345.67')
+    const line = groupLines(
+      row(1, 5, [[120, 'Invented Cafe'], [amount[0] - 8, tok], amount, right(545, '9,000.00')]),
+    )[0]
+    const cells = assignColumns(line, disc)
+    expect(cells.Description).toBe('Invented Cafe')
+    expect(cells.Debit).toBe(`${tok} 12,345.67`)
+  })
+})
+
+describe('whitespace items', () => {
+  it('are dropped by groupLines', () => {
+    const items = [...row(1, 5, [[10, 'a'], [20, ' '], [30, 'b']]), ...row(1, 40, [[10, '  ']])]
+    const lines = groupLines(items)
+    expect(lines).toHaveLength(1)
+    expect(lineText(lines[0])).toBe('a b')
   })
 })
