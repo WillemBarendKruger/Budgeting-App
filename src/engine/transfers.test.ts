@@ -59,3 +59,23 @@ describe('pairTransfers determinism', () => {
     expect(results[0].length).toBe(4);
   });
 });
+
+describe('pairTransfers ranking (final review I1)', () => {
+  it('prefers a both-sides-flagged pair over an unflagged same-day payment to a person', () => {
+    // Same day, same amount; the person payment's id sorts first so the old tie-break picked it.
+    const person = makeTx({ id: 'a-person', accountId: 'fnb', date: '2026-07-31', amount: -50000, description: 'FNB App Payment To Invented Friend' });
+    const card = makeTx({ id: 'b-card', accountId: 'fnb', date: '2026-07-31', amount: -50000, description: 'FNB App Payment To Credit Card' });
+    const credit = makeTx({ id: 'c-credit', accountId: 'disc', date: '2026-07-31', amount: 50000, description: 'FNB CARD' });
+    const m = pairTransfers([person, card, credit], patterns);
+    expect(m.get('c-credit')).toBe('b-card');
+    expect(m.get('b-card')).toBe('c-credit');
+    expect(m.has('a-person')).toBe(false);
+  });
+
+  it('a both-flagged pair beats an unflagged partner even when the unflagged one is closer in date', () => {
+    const person = makeTx({ id: 'a-person', accountId: 'fnb', date: '2026-07-31', amount: -50000, description: 'FNB App Payment To Invented Friend' });
+    const card = makeTx({ id: 'b-card', accountId: 'fnb', date: '2026-07-29', amount: -50000, description: 'FNB App Payment To Credit Card' });
+    const credit = makeTx({ id: 'c-credit', accountId: 'disc', date: '2026-07-31', amount: 50000, description: 'FNB CARD' });
+    expect(pairTransfers([person, card, credit], patterns).get('c-credit')).toBe('b-card');
+  });
+});

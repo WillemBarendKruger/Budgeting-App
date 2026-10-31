@@ -104,3 +104,16 @@ describe('recategorise fix round 1', () => {
     expect(recategorise(once, [], patterns)).toEqual(once);
   });
 });
+
+describe('recategorise transfer ranking (final review I1)', () => {
+  it('an unrecognised payment to a person stays an expense when a recognised card payment exists', () => {
+    const person = makeTx({ id: 'a-person', accountId: 'fnb', amount: -50000, payee: 'Invented Friend', description: 'FNB App Payment To Invented Friend' });
+    const card = makeTx({ id: 'b-card', accountId: 'fnb', amount: -50000, payee: 'Credit Card', description: 'FNB App Payment To Credit Card' });
+    const credit = makeTx({ id: 'c-credit', accountId: 'disc', amount: 50000, payee: 'FNB CARD', description: 'FNB CARD' });
+    const [rp, rc, rcr] = recategorise([person, card, credit], [], patterns);
+    expect(rp).toMatchObject({ kind: 'expense', groupId: UNCATEGORISED });
+    expect(rp.transferPairId).toBeUndefined();
+    expect(rc).toMatchObject({ kind: 'transfer', transferPairId: 'c-credit' });
+    expect(rcr).toMatchObject({ kind: 'transfer', transferPairId: 'b-card' });
+  });
+});

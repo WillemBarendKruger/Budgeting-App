@@ -9,10 +9,16 @@ export function matchesTransferPattern(description: string, patterns: string[]):
   return patterns.some((p) => safeRegex(p)?.test(description) ?? false);
 }
 
-/** Pairs own-account transfers (txId -> partner txId). Closest date first; each tx pairs at most once. */
-export function pairTransfers(txs: Transaction[], patterns: string[]): Map<string, string> {
-  const flagged = txs.map((t) => matchesTransferPattern(t.description, patterns));
-  const candidates: { i: number; j: number; gap: number; outId: string; inId: string }[] = [];
+/**
+ * Pairs own-account transfers (txId -> partner txId). Each tx pairs at most once.
+ * Ranking: pairs where BOTH sides are flagged first (so an unrecognised same-amount
+ * payment to a person can't steal a card credit from the real card payment), then
+ * closest date, then outflow id, then inflow id (deterministic).
+ * `alsoFlagged` marks extra tx ids as flagged (e.g. a rule sets kind 'transfer').
+ */
+export function pairTransfers(txs: Transaction[], patterns: string[], alsoFlagged?: ReadonlySet<string>): Map<string, string> {
+  const flagged = txs.map((t) => (alsoFlagged?.has(t.id) ?? false) || matchesTransferPattern(t.description, patterns));
+  const candidates: { i: number; j: number; both: number; gap: number; outId: string; inId: string }[] = [];
   for (let i = 0; i < txs.length; i++) {
     for (let j = i + 1; j < txs.length; j++) {
       const a = txs[i];
@@ -23,10 +29,10 @@ export function pairTransfers(txs: Transaction[], patterns: string[]): Map<strin
       const gap = Math.abs(daysBetween(a.date, b.date));
       if (gap > MAX_DAYS) continue;
       const [o, n] = a.amount < 0 ? [a, b] : [b, a];
-      candidates.push({ i, j, gap, outId: o.id, inId: n.id });
+      candidates.push({ i, j, both: flagged[i] && flagged[j] ? 1 : 0, gap, outId: o.id, inId: n.id });
     }
   }
-  candidates.sort((x, y) => x.gap - y.gap || cmp(x.outId, y.outId) || cmp(x.inId, y.inId));
+  candidates.sort((x, y) => y.both - x.both || x.gap - y.gap || cmp(x.outId, y.outId) || cmp(x.inId, y.inId));
   const used = new Set<number>();
   const result = new Map<string, string>();
   for (const { i, j } of candidates) {
