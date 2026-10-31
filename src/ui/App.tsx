@@ -1,7 +1,7 @@
 import { HashRouter, Route, Routes } from 'react-router-dom'
 import Layout from './Layout'
 import ImportScreen from './screens/ImportScreen'
-import Overview from './screens/Overview'
+import Overview from './screens/OverviewScreen'
 
 const Stub = ({ title }: { title: string }) => <h1>{title}</h1>
 
