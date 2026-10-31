@@ -157,11 +157,11 @@ expect(resolveDayMonth('28 Dec', p)).toBe('2026-12-28');
 expect(resolveDayMonth('03 Jan', p)).toBe('2027-01-03');
 expect(resolvePurchaseDate('31 Dec', '2027-01-02')).toBe('2026-12-31');
 expect(resolvePurchaseDate('05 Jun', '2026-06-08')).toBe('2026-06-05');
-expect(cleanPayee('POS Purchase Checkers Sixty60 479056*6037 05 Jun')).toBe('Checkers Sixty60');
-expect(cleanPayee('Magtape Debit Tracker 00Cli2637145 413812')).toBe('Tracker 00cli2637145'); // implementer may tune; must not contain '413812'
+expect(cleanPayee('POS Purchase Checkers Sixty60 123456*7890 05 Jun')).toBe('Checkers Sixty60');
+expect(cleanPayee('Magtape Debit Tracker 00Abc1234567 998877')).toBe('Tracker 00abc1234567'); // implementer may tune; must not contain '998877'
 expect(cleanPayee('SHELL SAMRAND Midrand')).toBe('Shell Samrand Midrand');
 ```
-(For the Tracker case assert `not.toContain('413812')` and `toMatch(/^Tracker/)` rather than the exact string.)
+(For the Tracker case assert `not.toContain('998877')` and `toMatch(/^Tracker/)` rather than the exact string.)
 - [ ] **Step 2:** Run → FAIL. Implement. Run → PASS.
 - [ ] **Step 3:** Commit `feat: date resolution and payee cleaning`.
 
@@ -187,7 +187,7 @@ expect(cleanPayee('SHELL SAMRAND Midrand')).toBe('Shell Samrand Midrand');
 - Produces: `interface Line { page: number; y: number; items: TextItem[] }` (items sorted by x); `groupLines(items: TextItem[], yTolerance = 2): Line[]` sorted by page, then y descending (pdf y grows upward); `lineText(l: Line): string` (items joined by single space); `findHeader(lines: Line[], labels: string[], from = 0): {index: number; columns: {label: string; x0: number; x1: number}[]} | undefined` (a line containing all labels as items); `assignColumns(line: Line, columns): Record<string, string>`. Assign each item to the column whose `[x0, x1]` span overlaps it most. With no overlap, use the column with the smallest horizontal gap, and treat numbers as right-aligned (compare right edges). Join multiple items in the same column with a space.
 - Fixtures: `row(page: number, y: number, cells: [x: number, str: string][]): TextItem[]` and `header(...)`. Use coordinates recorded in Task 3 step 3 if available, otherwise plausible A4 values.
 
-- [ ] **Step 1: Failing tests:** two items with y 700.4 and 699.1 → one line; header `Date|Description|Amount|Balance` found; a row with `'08 Jun'` at x 20, `'POS Purchase Shop'` at 60, `'479056*6037 05 Jun'` at 300, `'245.39'` at 480 (width 30), `'5,071.04Cr'` at 560 → assignColumns maps amount and balance correctly, and the card-ref text lands in Description (no header of its own) or a `Ref` pseudo-column. Pick one and assert it.
+- [ ] **Step 1: Failing tests:** two items with y 700.4 and 699.1 → one line; header `Date|Description|Amount|Balance` found; a row with `'08 Jun'` at x 20, `'POS Purchase Shop'` at 60, `'123456*7890 05 Jun'` at 300, `'245.39'` at 480 (width 30), `'5,071.04Cr'` at 560 → assignColumns maps amount and balance correctly, and the card-ref text lands in Description (no header of its own) or a `Ref` pseudo-column. Pick one and assert it.
 - [ ] **Step 2:** Run → FAIL. Implement. Run → PASS.
 - [ ] **Step 3:** Commit `feat: text layout line grouping and column assignment`.
 
@@ -223,7 +223,7 @@ expect(cleanPayee('SHELL SAMRAND Midrand')).toBe('Shell Samrand Midrand');
 
 - [ ] **Step 1: Failing tests** (synthetic fixture over 2 pages, period `20 November 2026 to 19 February 2027`, opening `100.00Cr`):
   - row `28 Dec` debit `50.00`, balance `50.00Cr` → `postedDate '2026-12-28'`, amount −5000.
-  - row `02 Jan` with ref `400738*5612 31 Dec`, debit `80.00`, balance `30.00` (no Cr) → `date '2026-12-31'`, `postedDate '2027-01-02'`, balance −3000.
+  - row `02 Jan` with ref `654321*0987 31 Dec`, debit `80.00`, balance `30.00` (no Cr) → `date '2026-12-31'`, `postedDate '2027-01-02'`, balance −3000.
   - row `03 Jan` credit `200.00Cr`, balance `170.00Cr`, plus an accrued-charge item `3.50` in the charges column → amount +20000, not 350.
   - row `04 Jan` with no description item, amount `0.37`, balance `169.63Cr` → description `'Unknown (FNB)'`, warning present.
   - turnover `No. Credit Transactions 1 200.00Cr`, `No. Debit Transactions 3 130.37Dr` → no warning; change the count to 4 → warning.
