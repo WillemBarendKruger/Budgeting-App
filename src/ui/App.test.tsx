@@ -67,7 +67,7 @@ describe('GroupPicker', () => {
   it('shows a disabled placeholder for an empty value', async () => {
     await seedIfEmpty()
     render(<GroupPicker value="" onChange={() => {}} />)
-    const ph = await screen.findByRole('option', { name: 'Choose group…' })
+    const ph = await screen.findByRole('option', { name: 'Choose group\u2026' })
     expect(ph).toBeDisabled()
     expect(screen.getByRole('combobox')).toHaveValue('')
   })
@@ -78,6 +78,6 @@ describe('GroupPicker', () => {
     render(<GroupPicker value="alcohol" onChange={() => {}} />)
     await screen.findByRole('option', { name: 'Alcohol' })
     expect(screen.getByRole('combobox')).toHaveValue('alcohol')
-    expect(screen.queryByRole('option', { name: 'Choose group…' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Choose group\u2026' })).toBeNull()
   })
 })

@@ -13,7 +13,7 @@ export default function GroupPicker({ value, onChange, includeHidden }: Props) {
   const matched = shown.some(g => g.id === value)
   return (
     <select value={matched ? value : ''} onChange={e => onChange(e.target.value)} aria-label="Group">
-      {!matched && <option value="" disabled>Choose group…</option>}
+      {!matched && <option value="" disabled>Choose group\u2026</option>}
       {shown.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
     </select>
   )
