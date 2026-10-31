@@ -1,0 +1,30 @@
+import { describe, it, expect } from 'vitest'
+import { cleanPayee, normaliseDescription } from './payee'
+
+describe('cleanPayee', () => {
+  it('strips prefix and card ref', () => {
+    expect(cleanPayee('POS Purchase Checkers Sixty60 479056*6037 05 Jun')).toBe('Checkers Sixty60')
+  })
+  it('removes long digit runs', () => {
+    const r = cleanPayee('Magtape Debit Tracker 00Cli2637145 413812')
+    expect(r).not.toContain('413812')
+    expect(r).toMatch(/^Tracker/)
+  })
+  it('title-cases plain descriptions', () => {
+    expect(cleanPayee('SHELL SAMRAND Midrand')).toBe('Shell Samrand Midrand')
+  })
+  it('strips trailing branch codes', () => {
+    expect(cleanPayee('POS Purchase Mcd Mall@Reds (0218')).toBe('Mcd Mall@reds')
+  })
+  it('strips transfer prefixes', () => {
+    expect(cleanPayee('FNB App Payment To Credit Card')).toBe('Credit Card')
+    expect(cleanPayee('Payshap Account Off-Us Credit Card')).toBe('Credit Card')
+    expect(cleanPayee('Electricity Prepaid Electricity 07139473602')).toBe('Electricity Prepaid Electricity')
+  })
+})
+
+describe('normaliseDescription', () => {
+  it('lowercases and collapses whitespace', () => {
+    expect(normaliseDescription('  Foo   BAR ')).toBe('foo bar')
+  })
+})
