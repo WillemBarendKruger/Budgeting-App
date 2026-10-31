@@ -24,9 +24,25 @@ async function findAccount(a: ParsedAccount): Promise<Account | undefined> {
   return db.accounts.where('[bank+last4+typeLabel]').equals([a.bank, a.last4, a.typeLabel]).first()
 }
 
-async function existingHashes(accountId: string): Promise<Set<string>> {
-  const txs = await db.transactions.where('accountId').equals(accountId).toArray()
-  return new Set(txs.map((t) => t.importHash))
+async function existingHashCounts(accountId: string): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  await db.transactions.where('accountId').equals(accountId).each((t) => {
+    counts.set(t.importHash, (counts.get(t.importHash) ?? 0) + 1)
+  })
+  return counts
+}
+
+/** Multiset dedupe: per hash, new = max(0, countInStatement - countExisting). Returns the new rows (with hashes). */
+function splitNewRows(accountId: string, rows: ParsedRow[], existing: Map<string, number>) {
+  const seen = new Map<string, number>()
+  const fresh: { row: ParsedRow; hash: string }[] = []
+  for (const row of rows) {
+    const hash = importHash(accountId, row)
+    const n = (seen.get(hash) ?? 0) + 1
+    seen.set(hash, n)
+    if (n > (existing.get(hash) ?? 0)) fresh.push({ row, hash })
+  }
+  return fresh
 }
 
 /** Reads only; never writes. */
@@ -34,13 +50,15 @@ export async function previewImport(s: ParsedStatement): Promise<ImportPreview> 
   const accounts: ImportPreview['accounts'] = []
   for (const parsed of s.accounts) {
     const existing = await findAccount(parsed)
-    const seen = existing ? await existingHashes(existing.id) : new Set<string>()
-    const duplicateRows = existing ? parsed.rows.filter((r) => seen.has(importHash(existing.id, r))).length : 0
+    const newCount = existing
+      ? splitNewRows(existing.id, parsed.rows, await existingHashCounts(existing.id)).length
+      : parsed.rows.length
+    const duplicateRows = parsed.rows.length - newCount
     const { ok, badRows } = checkBalances(parsed)
     accounts.push({
       parsed,
       existingAccountId: existing?.id,
-      newRows: parsed.rows.length - duplicateRows,
+      newRows: newCount,
       duplicateRows,
       balance: { ok, badRows },
     })
@@ -77,10 +95,8 @@ export async function commitImport(p: ImportPreview): Promise<{ added: number }>
         }
         await db.accounts.add(account)
       }
-      const seen = await existingHashes(account.id)
-      for (const r of a.rows) {
-        const hash = importHash(account.id, r)
-        if (seen.has(hash)) continue
+      const existing = await existingHashCounts(account.id)
+      for (const { row: r, hash } of splitNewRows(account.id, a.rows, existing)) {
         toAdd.push({
           id: crypto.randomUUID(),
           accountId: account.id,

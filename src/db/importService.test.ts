@@ -64,6 +64,34 @@ describe('import', () => {
     expect(await commitImport(await previewImport(stmt(twins)))).toEqual({ added: 2 })
   })
 
+  it('identical no-balance rows: both import, re-import adds none, overlap adds only the extra', async () => {
+    const twin = row({ description: 'POS Purchase Twin' })
+    expect(await commitImport(await previewImport(stmt([twin, twin])))).toEqual({ added: 2 })
+    const again = await previewImport(stmt([twin, twin]))
+    expect(again.accounts[0]).toMatchObject({ newRows: 0, duplicateRows: 2 })
+    expect(await commitImport(again)).toEqual({ added: 0 })
+
+    const other = row({ description: 'POS Purchase Solo', amount: -700 })
+    await commitImport(await previewImport(stmt([other])))
+    const b = await previewImport(stmt([other, other]))
+    expect(b.accounts[0]).toMatchObject({ newRows: 1, duplicateRows: 1 })
+    expect(await commitImport(b)).toEqual({ added: 1 })
+    expect(await db.transactions.count()).toBe(4)
+  })
+
+  it('partial overlap: only the new month is added', async () => {
+    const march = three
+    const april = [
+      row({ description: 'POS Purchase April One', postedDate: '2026-04-02', date: '2026-04-02', balance: 1000 }),
+      row({ description: 'POS Purchase April Two', postedDate: '2026-04-03', date: '2026-04-03', balance: 2000 }),
+    ]
+    await commitImport(await previewImport(stmt(march)))
+    const p = await previewImport(stmt([...march, ...april]))
+    expect(p.accounts[0]).toMatchObject({ newRows: 2, duplicateRows: 3 })
+    expect(await commitImport(p)).toEqual({ added: 2 })
+    expect(await db.transactions.count()).toBe(5)
+  })
+
   it('reapplyRules picks up a new rule but leaves manual txs alone', async () => {
     await commitImport(await previewImport(stmt(three)))
     const cafe = (await db.transactions.toArray()).find((t) => t.description.includes('Cafe'))!
