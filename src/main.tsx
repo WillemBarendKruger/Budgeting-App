@@ -2,12 +2,25 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './ui/App.tsx'
+import { ErrorBoundary, ErrorScreen } from './ui/ErrorBoundary.tsx'
 import { seedIfEmpty } from './db/seed.ts'
 
-seedIfEmpty().catch(err => console.error('Seeding failed', err))
+const root = createRoot(document.getElementById('root')!)
 
-createRoot(document.getElementById('root')!).render(
+root.render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )
+
+// A failed seed (e.g. IndexedDB unavailable) would otherwise leave every screen blank.
+seedIfEmpty().catch(err => {
+  console.error('Seeding failed', err)
+  root.render(
+    <StrictMode>
+      <ErrorScreen error={err} />
+    </StrictMode>,
+  )
+})
