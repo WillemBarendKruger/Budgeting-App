@@ -158,3 +158,25 @@ describe('coverage invariant', () => {
     for (const d of dates) expect(ms.filter(m => d >= m.start && d <= m.end)).toHaveLength(1)
   })
 })
+
+describe('salary pattern semantics (final review I4)', () => {
+  const two = (payee: string) => [pay('2026-06-30', payee), pay('2026-07-31', payee)]
+  const starts = (txs: ReturnType<typeof pay>[], salaryPattern: string) =>
+    payMonths(txs, settings({ salaryPattern }), '2026-08-10').map(m => m.start)
+
+  it("'a|b' alternation matches as a case-insensitive regex", () => {
+    expect(starts(two('Invented Corp Salary'), 'acme|SALARY')).toEqual(['2026-07-31', '2026-06-30'])
+  })
+
+  it('an invalid regex falls back to case-insensitive substring', () => {
+    expect(starts(two('Invented (Pty Salary'), 'invented (pty')).toEqual(['2026-07-31', '2026-06-30'])
+  })
+
+  it('suggested payee with regex metacharacters is escaped and matches itself', () => {
+    const txs = [pay('2026-06-30', 'Invented (Pty) Ltd+Co', 3000000), pay('2026-07-31', 'Invented (Pty) Ltd+Co', 3000000)]
+    const suggestion = suggestSalaryPattern(txs)!
+    expect(suggestion).toBe('Invented \\(Pty\\) Ltd\\+Co')
+    expect(new RegExp(suggestion, 'i').test('Invented (Pty) Ltd+Co')).toBe(true)
+    expect(starts(txs, suggestion)).toEqual(['2026-07-31', '2026-06-30'])
+  })
+})

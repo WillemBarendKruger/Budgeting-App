@@ -1,5 +1,6 @@
 import type { PayMonth, Settings, Transaction } from '../domain/types'
 import { addDays, daysBetween } from '../domain/dates'
+import { safeRegex } from './rules'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MIN_SPACING_DAYS = 10
@@ -57,13 +58,32 @@ function label(start: string, end: string): string {
   return `${fmt(start, spans)} – ${fmt(end, spans)}`
 }
 
+/**
+ * Salary pattern semantics (same as transfer patterns and the Settings validation):
+ * a case-insensitive regex tested against the payee. If the pattern is not a valid
+ * regex it falls back to a case-insensitive substring match.
+ */
+function salaryMatcher(raw: string | undefined): ((payee: string) => boolean) | undefined {
+  const pattern = raw?.trim()
+  if (!pattern) return undefined
+  const re = safeRegex(pattern)
+  if (re) return payee => re.test(payee)
+  const needle = pattern.toLowerCase()
+  return payee => payee.toLowerCase().includes(needle)
+}
+
+/** Escapes regex metacharacters so a literal payee works as a salary pattern. */
+export function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export function payMonths(txs: Transaction[], s: Settings, today: string): PayMonth[] {
   if (txs.length === 0) return []
-  const pattern = s.salaryPattern?.trim().toLowerCase()
-  const salary = pattern
+  const isSalary = salaryMatcher(s.salaryPattern)
+  const salary = isSalary
     ? collapse(
         [...new Set(
-          txs.filter(t => t.kind === 'income' && t.payee.toLowerCase().includes(pattern)).map(t => t.date),
+          txs.filter(t => t.kind === 'income' && isSalary(t.payee)).map(t => t.date),
         )].sort(),
       )
     : []
@@ -103,7 +123,10 @@ export function payMonthFor(date: string, months: PayMonth[]): PayMonth | undefi
   return months.find(m => date >= m.start && date <= m.end)
 }
 
-/** Payee of the largest income tx whose payee recurs as income in at least 2 calendar months. */
+/**
+ * Payee of the largest income tx whose payee recurs as income in at least 2 calendar months,
+ * regex-escaped so the suggestion matches that payee literally under regex semantics.
+ */
 export function suggestSalaryPattern(txs: Transaction[]): string | undefined {
   const monthsByPayee = new Map<string, Set<string>>()
   for (const t of txs) {
@@ -117,5 +140,5 @@ export function suggestSalaryPattern(txs: Transaction[]): string | undefined {
     if (t.kind !== 'income' || (monthsByPayee.get(t.payee)?.size ?? 0) < 2) continue
     if (!best || t.amount > best.amount) best = t
   }
-  return best?.payee
+  return best ? escapeRegex(best.payee) : undefined
 }
