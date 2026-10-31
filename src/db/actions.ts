@@ -24,8 +24,13 @@ async function upsertPayeeRule(txId: string, fields: Pick<Rule, 'kind' | 'groupI
   })
 }
 
+/**
+ * Marks one tx as manually set. Rules are then re-applied in the same transaction so that a
+ * paired transfer leg that stops being a transfer never leaves its partner with a stale
+ * transferPairId (non-manual partner is re-derived; a manual partner's dangling id is dropped).
+ */
 async function setManual(txId: string, kind: TxKind, groupId: string | null, reimbursesGroupId?: string): Promise<void> {
-  await db.transaction('rw', db.transactions, async () => {
+  await db.transaction('rw', [db.transactions, db.rules, db.settings], async () => {
     const tx = await db.transactions.get(txId)
     if (!tx) throw new Error(`Transaction not found: ${txId}`)
     const { reimbursesGroupId: _r, transferPairId: _p, ...rest } = tx
@@ -33,6 +38,7 @@ async function setManual(txId: string, kind: TxKind, groupId: string | null, rei
     if (kind === 'reimbursement' && reimbursesGroupId !== undefined) next.reimbursesGroupId = reimbursesGroupId
     if (kind === 'transfer' && tx.transferPairId !== undefined) next.transferPairId = tx.transferPairId
     await db.transactions.put(next)
+    await reapplyRules()
   })
 }
 

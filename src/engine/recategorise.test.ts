@@ -117,3 +117,35 @@ describe('recategorise transfer ranking (final review I1)', () => {
     expect(rcr).toMatchObject({ kind: 'transfer', transferPairId: 'b-card' });
   });
 });
+
+describe('recategorise rule-transfer pairing (final review I2a)', () => {
+  it("a rule with kind 'transfer' takes part in pairing, so the other leg becomes a transfer too", () => {
+    const rule: Rule = { id: 'r', matchType: 'equals', pattern: 'Invented Savings Move', kind: 'transfer', createdAt: 1 };
+    const out = makeTx({ id: 'o', accountId: 'fnb', date: '2026-07-30', amount: -200000, payee: 'Invented Savings Move', description: 'FNB App Transfer Invented Savings Move' });
+    const inn = makeTx({ id: 'i', accountId: 'savings', date: '2026-08-01', amount: 200000, payee: 'Invented Deposit', description: 'Invented Deposit' });
+    const [ro, ri] = recategorise([out, inn], [rule], patterns);
+    expect(ro).toMatchObject({ kind: 'transfer', groupId: null, transferPairId: 'i' });
+    expect(ri).toMatchObject({ kind: 'transfer', groupId: null, transferPairId: 'o' });
+  });
+});
+
+describe('recategorise manual pair legs (final review I2d)', () => {
+  const a = () => makeTx({ id: 'a', accountId: 'x', amount: -100, description: 'FNB App Payment To Credit Card' });
+  const b = () => makeTx({ id: 'b', accountId: 'y', amount: 100, description: 'FNB CARD' });
+
+  it('a manual transfer leg keeps its non-manual partner paired', () => {
+    const ma = { ...a(), setManually: true, kind: 'transfer' as const, groupId: null, transferPairId: 'b' };
+    const [ra, rb] = recategorise([ma, b()], [], patterns);
+    expect(ra).toBe(ma);
+    expect(rb).toMatchObject({ kind: 'transfer', transferPairId: 'a' });
+  });
+
+  it('a manual leg whose partner no longer points back loses its dangling transferPairId', () => {
+    const ma = { ...a(), setManually: true, kind: 'transfer' as const, groupId: null, transferPairId: 'b' };
+    const mb = { ...b(), setManually: true, kind: 'income' as const, groupId: null };
+    const [ra, rb] = recategorise([ma, mb], [], patterns);
+    expect(ra.kind).toBe('transfer');
+    expect(ra.transferPairId).toBeUndefined();
+    expect(rb).toBe(mb);
+  });
+});

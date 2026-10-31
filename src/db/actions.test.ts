@@ -4,6 +4,7 @@ import { makeTx } from '../engine/testHelpers'
 import { db } from './db'
 import { setGroup, setKind, setUnplanned } from './actions'
 import { seedIfEmpty } from './seed'
+import { reapplyRules } from './importService'
 
 beforeEach(async () => {
   await Promise.all(db.tables.map(t => t.clear()))
@@ -65,7 +66,8 @@ describe('setGroup', () => {
     expect(await db.rules.count()).toBe(0)
     const a = (await db.transactions.get('a'))!
     expect(a).toMatchObject({ groupId: 'eating-out', kind: 'expense', setManually: true })
-    expect((await db.transactions.get('b'))!.groupId).toBeNull()
+    // b is only re-derived by rules (no rule exists), never given a's group.
+    expect(await db.transactions.get('b')).toMatchObject({ groupId: 'uncategorised', setManually: false })
   })
 
   it('applying again with another group replaces the rule', async () => {
@@ -128,5 +130,35 @@ describe('setUnplanned', () => {
     await setUnplanned('u', false, 'x')
     expect(await db.transactions.get('u')).toMatchObject({ unplanned: false })
     expect((await db.transactions.get('u'))!.unplannedTag).toBeUndefined()
+  })
+})
+
+describe('manual edit of a paired transfer leg (final review I2d)', () => {
+  const pair = () => [
+    makeTx({ id: 'out', accountId: 'fnb', payee: 'Credit Card', description: 'FNB App Payment To Credit Card', amount: -50000 }),
+    makeTx({ id: 'in', accountId: 'disc', payee: 'FNB CARD', description: 'FNB CARD', amount: 50000 }),
+  ]
+
+  it('changing one leg to an expense leaves no dangling pair on the non-manual partner', async () => {
+    await db.transactions.bulkAdd(pair())
+    await reapplyRules()
+    expect((await db.transactions.get('in'))!.transferPairId).toBe('out')
+    await setGroup('out', 'shopping', false)
+    expect(await db.transactions.get('out')).toMatchObject({ kind: 'expense', groupId: 'shopping', setManually: true })
+    expect((await db.transactions.get('out'))!.transferPairId).toBeUndefined()
+    const partner = (await db.transactions.get('in'))!
+    expect(partner.transferPairId).toBeUndefined()
+  })
+
+  it('changing one leg clears transferPairId on a manual partner too', async () => {
+    await db.transactions.bulkAdd(pair())
+    await reapplyRules()
+    await setKind('in', 'transfer', { applyToAll: false })
+    expect(await db.transactions.get('in')).toMatchObject({ setManually: true, transferPairId: 'out' })
+    expect((await db.transactions.get('out'))!.transferPairId).toBe('in')
+    await setKind('out', 'savings', { applyToAll: false })
+    const partner = (await db.transactions.get('in'))!
+    expect(partner).toMatchObject({ kind: 'transfer', setManually: true })
+    expect(partner.transferPairId).toBeUndefined()
   })
 })
