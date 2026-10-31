@@ -92,3 +92,14 @@ select, input, button { font: inherit; }
 .budget-bar-fill { height: 100%; background: var(--pos); }
 .budget-bar[data-state="amber"] .budget-bar-fill { background: #d98e04; }
 .budget-bar[data-state="red"] .budget-bar-fill { background: var(--neg); }
+
+.filters { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: end; }
+.filters label { display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; color: var(--muted); }
+.filters label:has(input[type="checkbox"]) { flex-direction: row; align-items: center; }
+.tx-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); width: 100%; min-height: 44px; padding: var(--space-2) 0; text-align: left; background: none; color: var(--text); border: 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.tx-payee { flex: 1; min-width: 8rem; }
+.tx-payee .badge { margin-left: var(--space-2); }
+.chip { font-size: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 0 var(--space-2); }
+.edit-panel { position: sticky; bottom: var(--space-2); box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.15); }
+.edit-panel label { display: block; margin: var(--space-2) 0; }
+.edit-panel .actions { display: flex; gap: var(--space-2); }
