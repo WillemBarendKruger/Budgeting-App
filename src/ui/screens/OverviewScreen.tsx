@@ -52,7 +52,7 @@ export default function OverviewScreen() {
   const positive = curr.byGroup.filter(g => g.amount > 0)
   const top = positive.slice(0, TOP_N).map(g => ({ id: g.groupId, name: nameOf(g.groupId), value: g.amount, colour: colourOf(g.groupId) }))
   const rest = positive.slice(TOP_N).reduce((s, g) => s + g.amount, 0)
-  const slices = rest > 0 ? [...top, { id: '__other', name: 'Other', value: rest, colour: OTHER_COLOUR }] : top
+  const slices = rest > 0 ? [...top, { id: '__rest', name: 'Rest', value: rest, colour: OTHER_COLOUR }] : top
 
   return (
     <>
