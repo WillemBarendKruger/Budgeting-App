@@ -89,6 +89,20 @@ describe('TransactionsScreen', () => {
   })
 })
 
+describe('TransactionsScreen group drill-down (final review minor 5)', () => {
+  it('?group= also lists reimbursements of that group so the list reconciles with Overview', async () => {
+    await db.transactions.bulkAdd([
+      makeTx({ id: 'g1', payee: 'Invented Grocer', groupId: 'groceries', amount: -30000 }),
+      makeTx({ id: 'r1', payee: 'Invented Flatmate', kind: 'reimbursement', groupId: null, reimbursesGroupId: 'groceries', amount: 10000 }),
+      makeTx({ id: 'r2', payee: 'Invented Colleague', kind: 'reimbursement', groupId: null, reimbursesGroupId: 'eating-out', amount: 5000 }),
+    ])
+    setup('/transactions?group=groceries')
+    await waitFor(() => expect(screen.getAllByTestId('tx-row')).toHaveLength(2))
+    expect(screen.getByText('Invented Flatmate')).toBeInTheDocument()
+    expect(screen.queryByText('Invented Colleague')).toBeNull()
+  })
+})
+
 describe('SortScreen', () => {
   it('lists uncategorised payees by total and sorts them via rules', async () => {
     await db.transactions.bulkAdd([

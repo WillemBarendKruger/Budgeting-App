@@ -46,7 +46,8 @@ export default function TransactionsScreen() {
     return (txs ?? [])
       .filter(t => {
         if (month && payMonthFor(t.date, months)?.start !== month.start) return false
-        if (groupId && t.groupId !== groupId) return false
+        // Reimbursements of the group are listed too: the Overview figure is net of them.
+        if (groupId && t.groupId !== groupId && t.reimbursesGroupId !== groupId) return false
         if (kind && t.kind !== kind) return false
         if (unplannedOnly && !t.unplanned) return false
         if (tag && t.unplannedTag !== tag) return false
