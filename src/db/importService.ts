@@ -12,7 +12,7 @@ export interface ImportPreview {
     existingAccountId?: string
     newRows: number
     duplicateRows: number
-    balance: { ok: boolean; badRows: number[] }
+    balance: { ok: boolean; badRows: number[]; checked: number }
   }[]
 }
 
@@ -54,13 +54,13 @@ export async function previewImport(s: ParsedStatement): Promise<ImportPreview> 
       ? splitNewRows(existing.id, parsed.rows, await existingHashCounts(existing.id)).length
       : parsed.rows.length
     const duplicateRows = parsed.rows.length - newCount
-    const { ok, badRows } = checkBalances(parsed)
+    const { ok, badRows, checked } = checkBalances(parsed)
     accounts.push({
       parsed,
       existingAccountId: existing?.id,
       newRows: newCount,
       duplicateRows,
-      balance: { ok, badRows },
+      balance: { ok, badRows, checked },
     })
   }
   return { statement: s, accounts }

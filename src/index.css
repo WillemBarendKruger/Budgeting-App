@@ -64,3 +64,9 @@ select, input, button { font: inherit; }
 .money { font-variant-numeric: tabular-nums; }
 .money.neg { color: var(--neg); }
 .money.pos { color: var(--pos); }
+
+.dropzone { border: 2px dashed var(--border); border-radius: var(--radius); padding: var(--space-4); text-align: center; background: var(--surface); }
+.dropzone input { display: block; margin: var(--space-2) auto; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3); margin: var(--space-3) 0; }
+.notice { color: var(--neg); }
+.muted { color: var(--muted); }
