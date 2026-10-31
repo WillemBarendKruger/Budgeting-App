@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto'
+import Dexie from 'dexie'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -152,7 +153,7 @@ describe('SortScreen transfer action (final review I2c)', () => {
     await db.transactions.bulkAdd([makeTx({ id: 't1', payee: 'Invented Savings Move', amount: -200000, groupId: 'uncategorised' })])
     setup('/sort')
     const row = await screen.findByTestId('sort-row')
-    const spy = vi.spyOn(db.rules, 'add').mockImplementation(() => Promise.reject(new Error('Disk full (invented)')))
+    const spy = vi.spyOn(db.rules, 'add').mockImplementation(() => Dexie.Promise.reject(new Error('Disk full (invented)')))
     try {
       fireEvent.click(within(row).getByRole('button', { name: 'Not spending (transfer)' }))
       expect(await screen.findByRole('alert')).toHaveTextContent('Disk full (invented)')
