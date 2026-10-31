@@ -3,11 +3,11 @@ import { cleanPayee, normaliseDescription } from './payee'
 
 describe('cleanPayee', () => {
   it('strips prefix and card ref', () => {
-    expect(cleanPayee('POS Purchase Checkers Sixty60 479056*6037 05 Jun')).toBe('Checkers Sixty60')
+    expect(cleanPayee('POS Purchase Checkers Sixty60 123456*7890 05 Jun')).toBe('Checkers Sixty60')
   })
   it('removes long digit runs', () => {
-    const r = cleanPayee('Magtape Debit Tracker 00Cli2637145 413812')
-    expect(r).not.toContain('413812')
+    const r = cleanPayee('Magtape Debit Tracker 00Abc1234567 998877')
+    expect(r).not.toContain('998877')
     expect(r).toMatch(/^Tracker/)
     expect(cleanPayee('Electricity Prepaid Electricity 12345678901')).toBe('Electricity Prepaid Electricity')
   })
