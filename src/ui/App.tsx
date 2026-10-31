@@ -1,18 +1,13 @@
 import { HashRouter, Route, Routes } from 'react-router-dom'
 import Layout from './Layout'
+import BudgetsScreen from './screens/BudgetsScreen'
 import ImportScreen from './screens/ImportScreen'
 import Overview from './screens/OverviewScreen'
+import RulesScreen from './screens/RulesScreen'
+import SettingsScreen from './screens/SettingsScreen'
 import SortScreen from './screens/SortScreen'
+import SubscriptionsScreen from './screens/SubscriptionsScreen'
 import TransactionsScreen from './screens/TransactionsScreen'
-
-const Stub = ({ title }: { title: string }) => <h1>{title}</h1>
-
-const STUBS: [string, string][] = [
-  ['budgets', 'Budgets'],
-  ['subscriptions', 'Subscriptions'],
-  ['rules', 'Rules'],
-  ['settings', 'Settings'],
-]
 
 export default function App() {
   return (
@@ -23,9 +18,10 @@ export default function App() {
           <Route path="import" element={<ImportScreen />} />
           <Route path="transactions" element={<TransactionsScreen />} />
           <Route path="sort" element={<SortScreen />} />
-          {STUBS.map(([path, title]) => (
-            <Route key={path} path={path} element={<Stub title={title} />} />
-          ))}
+          <Route path="budgets" element={<BudgetsScreen />} />
+          <Route path="subscriptions" element={<SubscriptionsScreen />} />
+          <Route path="rules" element={<RulesScreen />} />
+          <Route path="settings" element={<SettingsScreen />} />
         </Route>
       </Routes>
     </HashRouter>
