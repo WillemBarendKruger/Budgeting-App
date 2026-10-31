@@ -1,4 +1,4 @@
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
+import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { TextItem } from '../domain/types'
 
@@ -19,25 +19,31 @@ export class WrongPasswordError extends Error {
 }
 
 export async function extractTextItems(data: ArrayBuffer, password?: string): Promise<TextItem[]> {
-  let doc
+  // Copy: pdf.js transfers the buffer to its worker, which would detach the caller's.
+  const task = getDocument({ data: new Uint8Array(data.slice(0)), password })
   try {
-    // Copy: pdf.js transfers the buffer to its worker, which would detach the caller's.
-    doc = await getDocument({ data: new Uint8Array(data.slice(0)), password }).promise
-  } catch (e) {
-    const err = e as { name?: string; code?: number }
-    if (err?.name === 'PasswordException') {
-      throw err.code === 2 ? new WrongPasswordError() : new PasswordRequiredError()
+    let doc: PDFDocumentProxy
+    try {
+      doc = await task.promise
+    } catch (e) {
+      const err = e as { name?: string; code?: number }
+      if (err?.name === 'PasswordException') {
+        throw err.code === 2 ? new WrongPasswordError() : new PasswordRequiredError()
+      }
+      throw e
     }
-    throw e
-  }
 
-  const items: TextItem[] = []
-  for (let p = 1; p <= doc.numPages; p++) {
-    const content = await (await doc.getPage(p)).getTextContent()
-    for (const it of content.items) {
-      if (!('str' in it) || it.str === '') continue
-      items.push({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width, page: p })
+    const items: TextItem[] = []
+    for (let p = 1; p <= doc.numPages; p++) {
+      const content = await (await doc.getPage(p)).getTextContent()
+      for (const it of content.items) {
+        if (!('str' in it) || it.str === '') continue
+        items.push({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width, page: p })
+      }
     }
+    return items
+  } finally {
+    // Releases the document and worker-side state (including the password).
+    await task.destroy()
   }
-  return items
 }
