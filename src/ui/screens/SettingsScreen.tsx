@@ -35,6 +35,7 @@ function SettingsForm({ settings, suggestion }: { settings: Settings; suggestion
   return (
     <form className="card" onSubmit={e => { e.preventDefault(); void save() }}>
       <label>Salary pattern <input aria-label="Salary pattern" value={salary} onChange={e => setSalary(e.target.value)} /></label>
+      {!settings.salaryPattern && suggestion && <p className="muted">Suggested (auto-applied until you save)</p>}
       {suggestion && <button type="button" onClick={() => setSalary(suggestion)}>Use suggestion</button>}
       <p><label>Fallback payday (1-31) <input aria-label="Fallback payday" inputMode="numeric" value={payday} onChange={e => setPayday(e.target.value)} /></label></p>
       <p><label>Transfer patterns (one per line)<br />

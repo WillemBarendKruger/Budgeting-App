@@ -36,6 +36,8 @@ function validate(text: string): Record<(typeof TABLES)[number], { id: string }[
       }
     }
   }
+  const st = d.settings as { id: string }[]
+  if (st.length !== 1 || st[0].id !== 'settings') throw new InvalidBackupError('Backup must contain exactly one settings row.')
   return d as Record<(typeof TABLES)[number], { id: string }[]>
 }
 

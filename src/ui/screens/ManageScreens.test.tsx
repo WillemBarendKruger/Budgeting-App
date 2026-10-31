@@ -1,11 +1,12 @@
 import 'fake-indexeddb/auto'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../../db/db'
 import { seedIfEmpty } from '../../db/seed'
 import { makeTx } from '../../engine/testHelpers'
 import BudgetsScreen, { parseBudget } from './BudgetsScreen'
+import { useAll } from '../hooks'
 import RulesScreen from './RulesScreen'
 import SettingsScreen from './SettingsScreen'
 import SubscriptionsScreen from './SubscriptionsScreen'
@@ -26,6 +27,7 @@ describe('parseBudget', () => {
   it('rejects junk and negatives', () => {
     expect(() => parseBudget('abc')).toThrow()
     expect(() => parseBudget('-5')).toThrow()
+    expect(() => parseBudget('0')).toThrow()
   })
 })
 
@@ -140,5 +142,41 @@ describe('SettingsScreen', () => {
     await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:x'))
     expect(click).toHaveBeenCalled()
     click.mockRestore()
+  })
+})
+
+describe('reimbursement rules', () => {
+  it('stores reimbursesGroupId and applies it on reapply', async () => {
+    await db.transactions.add(makeTx({ id: 'r1', payee: 'Refundco', description: 'Refundco', amount: 5000, kind: 'income' }))
+    wrap(<RulesScreen />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add rule' }))
+    fireEvent.change(screen.getByLabelText('Pattern'), { target: { value: 'refundco' } })
+    await screen.findByRole('option', { name: 'Shopping' })
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'reimbursement' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save rule' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('reimburses')
+    await waitFor(() => expect(screen.getAllByRole('option', { name: 'Groceries' })).toHaveLength(2))
+    const pickers = screen.getAllByLabelText('Group')
+    fireEvent.change(pickers[1], { target: { value: 'groceries' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save rule' }))
+    await waitFor(async () => {
+      const t = await db.transactions.get('r1')
+      expect(t?.kind).toBe('reimbursement')
+      expect(t?.reimbursesGroupId).toBe('groceries')
+    })
+    const rule = (await db.rules.toArray()).find(r => r.pattern === 'refundco')
+    expect(rule?.kind).toBe('reimbursement')
+    expect(rule?.reimbursesGroupId).toBe('groceries')
+  })
+})
+
+describe('effective salary pattern', () => {
+  it('uses the suggestion for pay months when none is saved', async () => {
+    const pay = ['2026-06-28', '2026-07-28', '2026-08-28']
+    await db.transactions.bulkAdd(pay.map((date, i) => makeTx({ id: 'p' + i, date, postedDate: date, payee: 'Acme Payroll', description: 'Acme Payroll', amount: 900000, kind: 'income' })))
+    const { result } = renderHook(() => useAll())
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    expect(result.current.settings?.salaryPattern).toBeUndefined()
+    expect(result.current.months.map(m => m.start)).toEqual(['2026-08-28', '2026-07-28', '2026-06-28'])
   })
 })

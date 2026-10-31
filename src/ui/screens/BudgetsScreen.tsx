@@ -13,7 +13,7 @@ export function parseBudget(input: string): number | undefined {
   if (s === '') return undefined
   if (/,\d{1,2}$/.test(s)) s = s.replace(/,(\d{1,2})$/, '.$1')
   const c = parseRand(s)
-  if (c < 0) throw new Error('negative')
+  if (c <= 0) throw new Error('budget must be positive')
   return c
 }
 

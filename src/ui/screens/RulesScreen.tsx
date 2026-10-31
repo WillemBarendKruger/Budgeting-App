@@ -9,8 +9,8 @@ import { useAll } from '../hooks'
 const KINDS: TxKind[] = ['expense', 'income', 'transfer', 'savings', 'reimbursement']
 const TYPES: MatchType[] = ['equals', 'contains', 'regex']
 
-interface Draft { id?: string; matchType: MatchType; pattern: string; groupId: string; kind: string }
-const EMPTY: Draft = { matchType: 'contains', pattern: '', groupId: '', kind: '' }
+interface Draft { id?: string; matchType: MatchType; pattern: string; groupId: string; kind: string; reimbursesGroupId: string }
+const EMPTY: Draft = { matchType: 'contains', pattern: '', groupId: '', kind: '', reimbursesGroupId: '' }
 
 export default function RulesScreen() {
   const { rules, groups, ready } = useAll()
@@ -25,6 +25,7 @@ export default function RulesScreen() {
     if (!pattern) return setError('Enter a pattern.')
     if (draft.matchType === 'regex' && !safeRegex(pattern)) return setError('Invalid regular expression.')
     if (!draft.groupId && !draft.kind) return setError('Choose a group or a kind.')
+    if (draft.kind === 'reimbursement' && !draft.reimbursesGroupId) return setError('Choose the group this reimburses.')
     const existing = draft.id ? await db.rules.get(draft.id) : undefined
     const rule: Rule = {
       id: draft.id ?? crypto.randomUUID(),
@@ -32,7 +33,7 @@ export default function RulesScreen() {
       pattern,
       ...(draft.groupId ? { groupId: draft.groupId } : {}),
       ...(draft.kind ? { kind: draft.kind as TxKind } : {}),
-      ...(existing?.reimbursesGroupId && draft.kind === 'reimbursement' ? { reimbursesGroupId: existing.reimbursesGroupId } : {}),
+      ...(draft.kind === 'reimbursement' ? { reimbursesGroupId: draft.reimbursesGroupId } : {}),
       createdAt: existing?.createdAt ?? Date.now(),
     }
     await db.rules.put(rule)
@@ -57,8 +58,11 @@ export default function RulesScreen() {
             {TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></label>{' '}
           <label>Pattern <input aria-label="Pattern" value={draft.pattern} onChange={e => setDraft({ ...draft, pattern: e.target.value })} /></label>{' '}
           <label>Group <GroupPicker value={draft.groupId} onChange={id => setDraft({ ...draft, groupId: id })} /></label>{' '}
-          <label>Kind <select aria-label="Kind" value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value })}>
+          <label>Kind <select aria-label="Kind" value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value, reimbursesGroupId: e.target.value === 'reimbursement' ? draft.reimbursesGroupId : '' })}>
             <option value="">(unchanged)</option>{KINDS.map(k => <option key={k} value={k}>{k}</option>)}</select></label>
+          {draft.kind === 'reimbursement' && (
+            <label> Reimburses group <GroupPicker value={draft.reimbursesGroupId} onChange={id => setDraft({ ...draft, reimbursesGroupId: id })} /></label>
+          )}
           {error && <p className="notice" role="alert">{error}</p>}
           <div className="actions">
             <button type="submit">Save rule</button>
@@ -72,7 +76,7 @@ export default function RulesScreen() {
             <code className="group-name">{r.pattern}</code>
             <span className="chip">{r.matchType}</span>
             <span>{[r.groupId && nameOf(r.groupId), r.kind].filter(Boolean).join(' / ')}</span>
-            <button type="button" onClick={() => { setDraft({ id: r.id, matchType: r.matchType, pattern: r.pattern, groupId: r.groupId ?? '', kind: r.kind ?? '' }); setError('') }}>Edit</button>
+            <button type="button" onClick={() => { setDraft({ id: r.id, matchType: r.matchType, pattern: r.pattern, groupId: r.groupId ?? '', kind: r.kind ?? '', reimbursesGroupId: r.reimbursesGroupId ?? '' }); setError('') }}>Edit</button>
             <button type="button" onClick={() => void remove(r.id)}>Delete</button>
           </li>
         ))}

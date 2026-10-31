@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import { payMonths } from '../engine/payMonths'
+import { payMonths, suggestSalaryPattern } from '../engine/payMonths'
 import type { PayMonth } from '../domain/types'
 
 /** Today's date as ISO from local parts (toISOString is UTC and can be yesterday in SAST). */
@@ -18,7 +18,11 @@ export function useAll() {
   const settings = useLiveQuery(() => db.settings.get('settings'), [])
   const ready = !!(txs && accounts && groups && rules && settings)
   const months = useMemo(
-    () => (ready ? payMonths(txs!, settings!, localToday()) : []),
+    () => {
+      if (!ready) return []
+      const salaryPattern = settings!.salaryPattern ?? suggestSalaryPattern(txs!)
+      return payMonths(txs!, { ...settings!, salaryPattern }, localToday())
+    },
     [ready, txs, settings],
   )
   return { txs, accounts, groups, rules, settings, months, ready }

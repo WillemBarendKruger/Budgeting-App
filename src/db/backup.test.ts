@@ -49,3 +49,21 @@ describe('backup', () => {
     expect(await snapshot()).toEqual(before)
   })
 })
+
+describe('backup settings row', () => {
+  const base = { app: 'budget-app', version: 1, accounts: [], transactions: [], groups: [], rules: [] }
+  it.each([
+    ['empty settings', []],
+    ['wrong settings id', [{ id: 'other' }]],
+    ['two settings rows', [{ id: 'settings' }, { id: 'settings' }]],
+  ])('rejects %s and leaves data unchanged', async (_n, settings) => {
+    const before = await snapshot()
+    await expect(importBackup(file(JSON.stringify({ ...base, settings })))).rejects.toBeInstanceOf(InvalidBackupError)
+    expect(await snapshot()).toEqual(before)
+  })
+  it('a valid restore leaves a settings row present', async () => {
+    const blob = await exportBackup()
+    await importBackup(file(await blob.text()))
+    expect((await db.settings.get('settings'))?.id).toBe('settings')
+  })
+})
