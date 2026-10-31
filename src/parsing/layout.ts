@@ -63,8 +63,9 @@ export function findHeader(
   return undefined
 }
 
-// Amounts: 'R 1,234.56', '-R 50.00', 'R 50.00-', '5,071.04Cr', '0.50', '-12'.
-const NUMERIC = /^-?(R\s*)?-?[\d,]*\.?\d+\s*(Cr|Dr|-)?$/i
+// Money-shaped only: optional sign/'R', digits (optional thousands separators), a decimal point with
+// exactly 2 digits, optional Cr/Dr/'-'. Bare integers (references, years) are text.
+const NUMERIC = /^-?(R\s*)?-?(\d{1,3}(,\d{3})+|\d+)\.\d{2}\s*(Cr|Dr|-)?$/i
 // A currency marker emitted as its own item, belonging to the amount that follows it.
 const CURRENCY_TOKEN = /^-?R-?$/
 

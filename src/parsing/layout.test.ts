@@ -169,3 +169,17 @@ describe('whitespace items', () => {
     expect(lineText(lines[0])).toBe('a b')
   })
 })
+
+describe('integer references are text, not amounts', () => {
+  const fnb = findHeader(groupLines(fnbHeader(1, 700)), FNB_LABELS)!.columns
+
+  it.each(['34582316', '12345678901', '2024'])("'%s' at Description x stays in Description", (ref) => {
+    const line = groupLines(row(1, 5, [[37, 'Prepaid Electricity'], [160, ref]]))[0]
+    expect(assignColumns(line, fnb)).toEqual({ Description: `Prepaid Electricity ${ref}` })
+  })
+
+  it('accepts a trailing-minus amount with space', () => {
+    const line = groupLines(row(1, 5, [right(482, 'R 188.01-')]))[0]
+    expect(assignColumns(line, fnb)).toEqual({ Amount: 'R 188.01-' })
+  })
+})
