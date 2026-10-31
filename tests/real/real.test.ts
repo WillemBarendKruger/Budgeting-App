@@ -14,7 +14,7 @@ const pdfs = existsSync(dir) ? readdirSync(dir).filter((f) => f.toLowerCase().en
 
 describe.skipIf(!existsSync(dir))('real statements', () => {
   it.each(pdfs.map((f, i) => [i + 1, f]))('statement %i parses and balances', async (n, file) => {
-    const items = (await extractNode(`${dir}/${file}`)) as TextItem[]
+    const items = (await extractNode(`${dir}/${file}`, process.env.STATEMENT_PASSWORD)) as TextItem[]
     const st = parseStatement(items)
     let missingDesc = 0
     for (const acc of st.accounts) {
