@@ -16,11 +16,12 @@ export function useAll() {
   const groups = useLiveQuery(() => db.groups.toArray(), [])
   const rules = useLiveQuery(() => db.rules.toArray(), [])
   const settings = useLiveQuery(() => db.settings.get('settings'), [])
+  const ready = !!(txs && accounts && groups && rules && settings)
   const months = useMemo(
-    () => (txs && settings ? payMonths(txs, settings, localToday()) : []),
-    [txs, settings],
+    () => (ready ? payMonths(txs!, settings!, localToday()) : []),
+    [ready, txs, settings],
   )
-  return { txs, accounts, groups, rules, settings, months }
+  return { txs, accounts, groups, rules, settings, months, ready }
 }
 
 /**
@@ -29,6 +30,6 @@ export function useAll() {
  */
 export function useSelectedMonth(months: PayMonth[]) {
   const [chosen, setChosen] = useState<string | undefined>()
-  const month = months.find(m => m.start === chosen) ?? months[0]
+  const month: PayMonth | undefined = months.find(m => m.start === chosen) ?? months[0]
   return [month, (start: string) => setChosen(start)] as const
 }
