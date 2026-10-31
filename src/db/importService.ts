@@ -20,8 +20,14 @@ export function importHash(accountId: string, r: ParsedRow): string {
   return `${accountId}|${r.postedDate}|${r.amount}|${normaliseDescription(r.description)}|${r.balance ?? ''}`
 }
 
+/**
+ * Account identity is bank + last4. The parsed typeLabel is free text lifted from the
+ * statement and may differ between statements of the same account, so it is used only
+ * to name a NEW account; an existing account is reused untouched (its typeLabel and the
+ * user's name are never overwritten by a later statement).
+ */
 async function findAccount(a: ParsedAccount): Promise<Account | undefined> {
-  return db.accounts.where('[bank+last4+typeLabel]').equals([a.bank, a.last4, a.typeLabel]).first()
+  return db.accounts.where('[bank+last4]').equals([a.bank, a.last4]).first()
 }
 
 async function existingHashCounts(accountId: string): Promise<Map<string, number>> {

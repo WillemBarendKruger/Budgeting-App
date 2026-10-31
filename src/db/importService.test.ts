@@ -113,3 +113,32 @@ describe('import', () => {
     expect(importHash('a', row({}))).toMatch(/\|$/)
   })
 })
+
+describe('account identity is bank + last4 (final review I5)', () => {
+  const withLabel = (typeLabel: string, rows: ParsedRow[]): ParsedStatement => ({
+    ...stmt(rows),
+    accounts: [{ bank: 'fnb', typeLabel, last4: '1234', role: 'everyday', rows }],
+  })
+  const jan = row({ description: 'POS Purchase Jan Shop', amount: -1000, balance: 99000, postedDate: '2026-01-05', date: '2026-01-05' })
+  const feb = row({ description: 'POS Purchase Feb Shop', amount: -2000, balance: 97000, postedDate: '2026-02-05', date: '2026-02-05' })
+
+  it('a statement with a different typeLabel for the same bank+last4 reuses the account and dedupes the overlap', async () => {
+    await commitImport(await previewImport(withLabel('Gold Cheque', [jan])))
+    const p = await previewImport(withLabel('Invented Holder Gold Cheque', [jan, feb]))
+    expect(p.accounts[0]).toMatchObject({ newRows: 1, duplicateRows: 1 })
+    expect(p.accounts[0].existingAccountId).toBeTruthy()
+    expect(await commitImport(p)).toEqual({ added: 1 })
+    const accounts = await db.accounts.toArray()
+    expect(accounts).toHaveLength(1)
+    // The existing account is kept untouched (label and user-facing name).
+    expect(accounts[0]).toMatchObject({ typeLabel: 'Gold Cheque', name: 'Gold Cheque ••1234' })
+    expect(await db.transactions.count()).toBe(2)
+  })
+
+  it('a different last4 is still a different account', async () => {
+    await commitImport(await previewImport(withLabel('Gold Cheque', [jan])))
+    const other: ParsedStatement = { ...stmt([jan]), accounts: [{ bank: 'fnb', typeLabel: 'Gold Cheque', last4: '9876', role: 'everyday', rows: [jan] }] }
+    expect(await commitImport(await previewImport(other))).toEqual({ added: 1 })
+    expect(await db.accounts.count()).toBe(2)
+  })
+})

@@ -17,6 +17,11 @@ export class BudgetDB extends Dexie {
       rules: 'id',
       settings: 'id',
     })
+    // v2: account identity is bank + last4 only (typeLabel is parsed free text and display-only).
+    // Index-only change: Dexie drops/creates the index during the upgrade, rows are kept as-is.
+    this.version(2).stores({
+      accounts: 'id, [bank+last4]',
+    })
   }
 }
 
