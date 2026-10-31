@@ -3,3 +3,12 @@ dist/
 statements/
 *.pdf
 .superpowers/
+logs
+*.log
+npm-debug.log*
+dist-ssr
+*.local
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
