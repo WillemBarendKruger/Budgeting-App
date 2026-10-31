@@ -1,9 +1,9 @@
 // Dev tool: dump positioned text items from a statement PDF for layout inspection.
 // Usage: node scripts/dump-pdf.mjs <in.pdf> [password]
 // Writes statements/dumps/<name>.json and <name>.lines.txt (gitignored).
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync } from 'node:fs'
 import { basename, extname } from 'node:path'
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { extractNode } from './pdf-node.mjs'
 
 const [file, password] = process.argv.slice(2)
 if (!file) {
@@ -11,15 +11,7 @@ if (!file) {
   process.exit(1)
 }
 
-const doc = await getDocument({ data: new Uint8Array(readFileSync(file)), password }).promise
-const items = []
-for (let p = 1; p <= doc.numPages; p++) {
-  const content = await (await doc.getPage(p)).getTextContent()
-  for (const it of content.items) {
-    if (!('str' in it) || it.str === '') continue
-    items.push({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width, page: p })
-  }
-}
+const items = await extractNode(file, password)
 
 const lines = []
 let current = null
