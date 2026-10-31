@@ -120,3 +120,46 @@ export function assignColumns(line: Line, columns: Column[]): Record<string, str
   flush()
   return out
 }
+
+export interface PageTable { page: number; lines: Line[]; header?: { index: number; columns: Column[] }; columns?: Column[] }
+
+/**
+ * Walk pages in order, finding each page's table header. `columns` is the page's own header columns, or
+ * the most recent header's columns on continuation pages (undefined until a header has been seen).
+ * `adjust` may refine a header's columns using the page's lines.
+ */
+export function* pageTables(
+  lines: Line[],
+  labels: string[],
+  adjust?: (columns: Column[], headerLine: Line, pageLines: Line[]) => Column[],
+): Generator<PageTable> {
+  let lastColumns: Column[] | undefined
+  for (const page of new Set(lines.map((l) => l.page))) {
+    const pageLines = lines.filter((l) => l.page === page)
+    const found = findHeader(pageLines, labels)
+    const header = found && adjust
+      ? { index: found.index, columns: adjust(found.columns, pageLines[found.index], pageLines) }
+      : found
+    if (header) lastColumns = header.columns
+    yield { page, lines: pageLines, header, columns: header?.columns ?? lastColumns }
+  }
+}
+
+/** A wrapped description sits this close (in points) under its row; footers are far below. */
+export const WRAP_MAX_GAP = 20
+
+/**
+ * If `line` continues the previous row's description (only Description-column text, starting inside that
+ * column, on the same page right under the row) return that text, else undefined.
+ */
+export function wrapContinuation(
+  line: Line,
+  columns: Column[],
+  last: { page: number; y: number } | undefined,
+): string | undefined {
+  const descCol = columns.find((c) => c.label === 'Description')
+  if (!last || !descCol || last.page !== line.page || last.y - line.y > WRAP_MAX_GAP) return undefined
+  if (line.items[0].x < descCol.x0 - 2) return undefined
+  const cells = assignColumns(line, columns)
+  return Object.keys(cells).length === 1 && cells.Description ? cells.Description.trim() : undefined
+}

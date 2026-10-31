@@ -136,4 +136,33 @@ describe('parseFnb', () => {
     expect(noPeriod.warnings.join('|')).toMatch(/period/i)
     expect(parseFnb([]).warnings.join('|')).toMatch(/account/i)
   })
+
+  const withHeader = (hdr: ReturnType<typeof fnbHeader>) => [
+    ...page1Top,
+    ...hdr,
+    ...tx(1, 650, '28 Dec', 'Shop', '50.00', '50.00Cr', { accrued: '3.50' }),
+  ]
+  const noBank = fnbHeader(1, 680).filter((i) => i.str !== 'Bank')
+
+  it('ignores accrued charges when the header has no Bank item', () => {
+    const r = parseFnb(withHeader(noBank)).accounts[0].rows
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ amount: -5000, balance: 5000, description: 'Shop' })
+  })
+
+  it('ignores accrued charges with a single "Accrued Bank Charges" header item', () => {
+    const hdr = [...noBank, ...row(1, 680, [[540, 'Accrued Bank Charges']])]
+    const r = parseFnb(withHeader(hdr)).accounts[0].rows
+    expect(r[0]).toMatchObject({ amount: -5000, balance: 5000 })
+  })
+
+  it('does not take an account from a transaction description', () => {
+    const items = [
+      ...build(),
+      ...tx(2, 690, '05 Jan', 'Transfer Other Account : 99887766', '1.00', '168.63Cr'),
+    ]
+    const st2 = parseFnb(items)
+    expect(st2.accounts[0].last4).toBe('1234')
+    expect(st2.warnings.join('|')).not.toMatch(/Second account/)
+  })
 })

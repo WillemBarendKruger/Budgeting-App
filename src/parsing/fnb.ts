@@ -1,9 +1,12 @@
 import type { Cents, ParsedAccount, ParsedRow, ParsedStatement, TextItem } from '../domain/types'
 import { parseRand } from '../domain/money'
 import { parseFnbPeriod, resolveDayMonth, resolvePurchaseDate } from '../domain/dates'
-import { assignColumns, findHeader, groupLines, lineText, type Column, type Line } from './layout'
+import { assignColumns, groupLines, lineText, pageTables, wrapContinuation, type Column, type Line } from './layout'
 
-const HEADER_LABELS = ['Date', 'Description', 'Amount', 'Balance', 'Bank']
+const HEADER_LABELS = ['Date', 'Description', 'Amount', 'Balance']
+const CHARGES_LABEL = /^(Accrued|Bank|Charges|Bank Charges|Accrued Bank Charges)$/i
+const CHARGES_Y_TOLERANCE = 15
+const CHARGES_OFFSET = 50 // synthetic charges column sits this far right of the Balance label centre
 const DAY_MONTH = /^\d{2} [A-Z][a-z]{2}$/
 const ACCOUNT = /([A-Za-z][A-Za-z ]*?Account)\s*:\s*(\d{6,})/
 const MONEY = '(\\d{1,3}(?:,\\d{3})+|\\d+)\\.(\\d{2})'
@@ -18,7 +21,6 @@ const TABLE_END = /^(Closing Balance|Turnover for Statement Period)/i
 const CARD_REF = /\b\d{6}\*\d{4}(?: (\d{2} [A-Z][a-z]{2}))?/
 const SUFFIX_ITEM = /^(Cr|Dr)$/i
 const MONEY_ITEM = /^-?(R\s*)?-?(\d{1,3}(,\d{3})+|\d+)\.\d{2}$/i
-const WRAP_MAX_GAP = 20
 
 /** Cents from a "1,234.56Cr"-style string. Cr is positive; Dr or no suffix is negative. */
 function signedCents(str: string): Cents | undefined {
@@ -42,6 +44,33 @@ function mergeSuffixes(line: Line): Line {
   return { ...line, items }
 }
 
+/**
+ * Append an (ignored) 'Charges' column right of Balance so accrued bank charges can never land in Balance.
+ * Uses the stacked/inline "Accrued Bank Charges" label items near the header line if present, else a
+ * synthetic column further right.
+ */
+function addChargesColumn(columns: Column[], headerLine: Line, pageLines: Line[]): Column[] {
+  const balance = columns.find((c) => c.label === 'Balance')
+  if (!balance) return columns
+  const labels = pageLines
+    .filter((l) => Math.abs(l.y - headerLine.y) <= CHARGES_Y_TOLERANCE)
+    .flatMap((l) => l.items)
+    .filter((i) => CHARGES_LABEL.test(i.str.trim()) && i.x + i.width / 2 > balance.centre)
+  let x0: number
+  let centre: number
+  if (labels.length) {
+    x0 = Math.min(...labels.map((i) => i.x))
+    centre = (x0 + Math.max(...labels.map((i) => i.x + i.width))) / 2
+  } else {
+    centre = balance.centre + CHARGES_OFFSET
+    x0 = balance.centre + CHARGES_OFFSET / 2
+  }
+  return [
+    ...columns.map((c) => (c === balance ? { ...c, x1: x0 } : c)),
+    { label: 'Charges', x0, x1: Infinity, centre },
+  ]
+}
+
 interface Pending { row: ParsedRow; raw: string; page: number; y: number }
 
 export function parseFnb(items: TextItem[]): ParsedStatement {
@@ -55,12 +84,16 @@ export function parseFnb(items: TextItem[]): ParsedStatement {
   let closing: Cents | undefined
   let turnCredit: { count: number; total: Cents } | undefined
   let turnDebit: { count: number; total: Cents } | undefined
+  const firstTable = [...pageTables(lines, HEADER_LABELS)].find((t) => t.header)
+  const firstHeaderLine = firstTable && firstTable.lines[firstTable.header!.index]
+  let beforeTable = true
   for (const line of lines) {
+    if (line === firstHeaderLine) beforeTable = false
     const text = lineText(line)
     if (!period && /Statement Period/i.test(text)) {
       try { period = parseFnbPeriod(text) } catch { /* reported below if never found */ }
     }
-    const acc = ACCOUNT.exec(text)
+    const acc = beforeTable ? ACCOUNT.exec(text) : null
     if (acc) {
       const last4 = acc[2].slice(-4)
       if (!account) account = { bank: 'fnb', typeLabel: acc[1].trim(), last4, role: 'everyday', rows: [] }
@@ -92,15 +125,10 @@ export function parseFnb(items: TextItem[]): ParsedStatement {
 
   // Pass 2: transaction rows.
   const pending: Pending[] = []
-  let lastColumns: Column[] | undefined // header seen most recently; reused on pages without one
   let lastRow: Pending | undefined
   let rowsSeen = 0
 
-  for (const page of new Set(lines.map((l) => l.page))) {
-    const pageLines = lines.filter((l) => l.page === page)
-    const tableHeader = findHeader(pageLines, HEADER_LABELS)
-    if (tableHeader) lastColumns = tableHeader.columns
-    const columns = tableHeader?.columns ?? lastColumns
+  for (const { page, lines: pageLines, header: tableHeader, columns } of pageTables(lines, HEADER_LABELS, addChargesColumn)) {
     let warnedNoHeader = false
     let tableOpen = true
 
@@ -112,15 +140,10 @@ export function parseFnb(items: TextItem[]): ParsedStatement {
       const dateFirst = DAY_MONTH.test(line.items[0].str.trim())
 
       if (!dateFirst) {
-        if (!columns || NOT_DESCRIPTION.test(text) || !lastRow || lastRow.page !== page) return
-        // Possible wrapped description: only Description-column text, right under the previous row.
-        const cells = assignColumns(line, columns)
-        const descCol = columns.find((c) => c.label === 'Description')
-        if (
-          descCol && lastRow.y - line.y <= WRAP_MAX_GAP && line.items[0].x >= descCol.x0 - 2 &&
-          Object.keys(cells).length === 1 && cells.Description
-        ) {
-          lastRow.raw = `${lastRow.raw} ${cells.Description.trim()}`
+        if (!columns || NOT_DESCRIPTION.test(text)) return
+        const more = wrapContinuation(line, columns, lastRow)
+        if (lastRow && more) {
+          lastRow.raw = `${lastRow.raw} ${more}`
           lastRow.y = line.y
         }
         return

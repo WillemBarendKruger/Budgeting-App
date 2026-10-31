@@ -1,6 +1,6 @@
 import type { AccountRole, ParsedAccount, ParsedRow, ParsedStatement, TextItem } from '../domain/types'
 import { parseRand } from '../domain/money'
-import { assignColumns, findHeader, groupLines, lineText, type Column } from './layout'
+import { assignColumns, findHeader, groupLines, lineText, pageTables, wrapContinuation } from './layout'
 
 const HEADER_LABELS = ['Date', 'Description', 'Debit', 'Credit', 'Balance']
 const SUMMARY_LABELS = ['Account Type', 'Account Number', 'Balance']
@@ -21,17 +21,10 @@ export function parseDiscovery(items: TextItem[]): ParsedStatement {
   let periodStart = ''
   let periodEnd = ''
   let current: ParsedAccount | undefined
-  let lastColumns: Column[] | undefined // table header seen most recently; reused on continuation pages
   let lastRow: { row: ParsedRow; page: number; y: number } | undefined
-  // A wrapped description line sits close under its row; footers are far below.
-  const WRAP_MAX_GAP = 20
 
-  for (const page of new Set(lines.map((l) => l.page))) {
-    const pageLines = lines.filter((l) => l.page === page)
-    const tableHeader = findHeader(pageLines, HEADER_LABELS)
+  for (const { page, lines: pageLines, header: tableHeader, columns } of pageTables(lines, HEADER_LABELS)) {
     const summaryHeader = findHeader(pageLines, SUMMARY_LABELS)
-    if (tableHeader) lastColumns = tableHeader.columns
-    const columns = tableHeader?.columns ?? lastColumns
     let warnedNoHeader = false
 
     pageLines.forEach((line, idx) => {
@@ -65,16 +58,9 @@ export function parseDiscovery(items: TextItem[]): ParsedStatement {
         return
       }
       if (!dateFirst) {
-        // Possible wrapped description: only Description-column text, starting inside that column,
-        // right under the previous row. Footer lines fail the x and distance checks.
-        const cells = assignColumns(line, columns)
-        const descCol = columns.find((c) => c.label === 'Description')
-        if (
-          lastRow && lastRow.page === page && lastRow.y - line.y <= WRAP_MAX_GAP &&
-          descCol && line.items[0].x >= descCol.x0 - 2 &&
-          Object.keys(cells).length === 1 && cells.Description
-        ) {
-          lastRow.row.description = `${lastRow.row.description} ${cells.Description.trim()}`.trim()
+        const more = wrapContinuation(line, columns, lastRow)
+        if (lastRow && more) {
+          lastRow.row.description = `${lastRow.row.description} ${more}`.trim()
           lastRow.y = line.y
         }
         return
