@@ -9,6 +9,10 @@ describe('cleanPayee', () => {
     const r = cleanPayee('Magtape Debit Tracker 00Cli2637145 413812')
     expect(r).not.toContain('413812')
     expect(r).toMatch(/^Tracker/)
+    expect(cleanPayee('Electricity Prepaid Electricity 12345678901')).toBe('Electricity Prepaid Electricity')
+  })
+  it('falls back to the title-cased original when cleaning leaves nothing', () => {
+    expect(cleanPayee('POS Purchase 123456*7890')).toBe('Pos Purchase 123456*7890')
   })
   it('title-cases plain descriptions', () => {
     expect(cleanPayee('SHELL SAMRAND Midrand')).toBe('Shell Samrand Midrand')
@@ -19,7 +23,6 @@ describe('cleanPayee', () => {
   it('strips transfer prefixes', () => {
     expect(cleanPayee('FNB App Payment To Credit Card')).toBe('Credit Card')
     expect(cleanPayee('Payshap Account Off-Us Credit Card')).toBe('Credit Card')
-    expect(cleanPayee('Electricity Prepaid Electricity 07139473602')).toBe('Electricity Prepaid Electricity')
   })
 })
 

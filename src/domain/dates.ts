@@ -49,7 +49,7 @@ export function resolveDayMonth(dm: string, period: { start: string; end: string
   const hi = addDays(period.end, 7)
   const startYear = Number(period.start.slice(0, 4))
   const endYear = Number(period.end.slice(0, 4))
-  for (let y = startYear; y <= endYear; y++) {
+  for (let y = startYear - 1; y <= endYear + 1; y++) {
     const iso = toIso(y, month, day)
     if (iso >= lo && iso <= hi) return iso
   }
