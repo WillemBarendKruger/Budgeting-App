@@ -59,6 +59,38 @@ describe('detectSubscriptions', () => {
     expect(s.monthly).toBe(1500)
     expect(s.months).toBe(3)
   })
+  it('finds a recurring charge despite an earlier one-off from the same payee', () => {
+    const txs = [...three, sub('2026-08-26', -8000)]
+    const r = detectSubscriptions(txs, months, [])
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ monthly: 1499, months: 3, lastDate: '2026-09-28' })
+  })
+  it('does not flag a payee with varied amounts', () => {
+    const txs = [sub('2026-06-28', -5199, 'Games Store'), sub('2026-07-28', -17010, 'Games Store'),
+      sub('2026-08-28', -5940, 'Games Store'), sub('2026-09-28', -10340, 'Games Store')]
+    expect(detectSubscriptions(txs, months, [])).toEqual([])
+  })
+  it('still detects a cancelled subscription with its real last date', () => {
+    const wide: PayMonth[] = [
+      { start: '2026-11-25', end: '2026-12-24', label: 'e' },
+      { start: '2026-10-25', end: '2026-11-24', label: 'd' },
+      ...months,
+    ]
+    const r = detectSubscriptions(three, wide, [])
+    expect(r).toHaveLength(1)
+    expect(r[0].lastDate).toBe('2026-09-28')
+  })
+  it('detects when the newest month has no charge yet', () => {
+    const wide: PayMonth[] = [{ start: '2026-10-25', end: '2026-11-24', label: 'e' }, ...months]
+    expect(detectSubscriptions(three, wide, [])).toHaveLength(1)
+  })
+  it('reports the old price after a price rise (new price has < 3 months)', () => {
+    // Accepted behaviour: 1700 is >10% from 1500, so it forms its own cluster until it has 3 months.
+    const txs = [sub('2026-06-28', -1500), sub('2026-07-28', -1500), sub('2026-08-28', -1500), sub('2026-09-28', -1700)]
+    const r = detectSubscriptions(txs, months, [])
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ monthly: 1500, lastDate: '2026-08-28' })
+  })
   it('does not mutate inputs', () => {
     const copy = JSON.stringify(three)
     detectSubscriptions(three, months, [])

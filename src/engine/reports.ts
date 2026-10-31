@@ -63,7 +63,7 @@ export function groupChange(
 ): { pct: number | null; grew: boolean } {
   const c = curr.byGroup.find(g => g.groupId === groupId)?.amount ?? 0
   const p = prev?.byGroup.find(g => g.groupId === groupId)?.amount ?? 0
-  if (!prev || p === 0) return { pct: null, grew: false }
+  if (!prev || p <= 0) return { pct: null, grew: false }
   const pct = ((c - p) / p) * 100
-  return { pct, grew: pct > 15 }
+  return { pct, grew: (c - p) * 100 > p * 15 }
 }

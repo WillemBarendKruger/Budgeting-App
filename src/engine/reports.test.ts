@@ -73,9 +73,11 @@ describe('groupChange', () => {
     expect(groupChange(mk(1200), mk(1000), 'g')).toEqual({ pct: 20, grew: true })
     expect(groupChange(mk(1100), mk(1000), 'g')).toEqual({ pct: 10, grew: false })
     expect(groupChange(mk(1150), mk(1000), 'g').grew).toBe(false)
+    expect(groupChange(mk(115), mk(100), 'g').grew).toBe(false)
   })
   it('returns null pct without a usable previous', () => {
     expect(groupChange(mk(1200), undefined, 'g')).toEqual({ pct: null, grew: false })
+    expect(groupChange(mk(1200), mk(-50), 'g')).toEqual({ pct: null, grew: false })
     expect(groupChange(mk(1200), mk(0), 'g')).toEqual({ pct: null, grew: false })
     expect(groupChange(mk(1200), mk(1000), 'other')).toEqual({ pct: null, grew: false })
   })
