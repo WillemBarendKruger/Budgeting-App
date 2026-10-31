@@ -162,3 +162,30 @@ describe('manual edit of a paired transfer leg (final review I2d)', () => {
     expect(partner.transferPairId).toBeUndefined()
   })
 })
+
+describe('setGroup apply-to-all on manual / previously-converted txs (final review I3)', () => {
+  it('a manually-set expense that a pattern would make a transfer stays an expense in the new group', async () => {
+    await db.transactions.bulkAdd([
+      makeTx({ id: 'm', payee: 'Invented Store', description: 'Inter Account Transfer Invented Store', amount: -40000, kind: 'expense', groupId: 'shopping', setManually: true }),
+    ])
+    await setGroup('m', 'eating-out', true)
+    const rules = await db.rules.toArray()
+    expect(rules).toHaveLength(1)
+    expect(rules[0]).toMatchObject({ kind: 'expense', groupId: 'eating-out' })
+    expect(await db.transactions.get('m')).toMatchObject({ kind: 'expense', groupId: 'eating-out', setManually: false })
+  })
+
+  it("re-grouping keeps the existing equals rule's kind when the new rule doesn't set one", async () => {
+    await db.transactions.bulkAdd([
+      makeTx({ id: 'd', payee: 'Invented Friend', amount: -30000 }),
+      makeTx({ id: 'c', payee: 'Invented Friend', amount: 12000, kind: 'income' }),
+    ])
+    await setGroup('c', 'groceries', true) // converts the credit: rule {kind:'expense', groupId:'groceries'}
+    expect(await db.transactions.get('c')).toMatchObject({ kind: 'expense', groupId: 'groceries' })
+    await setGroup('d', 'shopping', true) // d is a plain expense -> groupId-only, but kind must be kept
+    const rules = await db.rules.toArray()
+    expect(rules).toHaveLength(1)
+    expect(rules[0]).toMatchObject({ kind: 'expense', groupId: 'shopping' })
+    expect(await db.transactions.get('c')).toMatchObject({ kind: 'expense', groupId: 'shopping' })
+  })
+})

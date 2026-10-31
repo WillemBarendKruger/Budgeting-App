@@ -5,6 +5,9 @@ import { reapplyRules } from './importService'
 /**
  * Upserts the single `equals` rule for this tx's payee (case-insensitive),
  * clears `setManually` on the tx so the rule applies to it, then re-runs rules.
+ * When an existing equals rule is replaced and the new fields don't set `kind`,
+ * the old rule's kind (and its reimbursesGroupId for a reimbursement) is kept,
+ * so re-grouping never silently reverts the payee's converted txs.
  */
 async function upsertPayeeRule(txId: string, fields: Pick<Rule, 'kind' | 'groupId' | 'reimbursesGroupId'>): Promise<void> {
   // Rule upsert and reapply share one transaction: a failure can't leave a saved rule with stale txs.
@@ -15,7 +18,14 @@ async function upsertPayeeRule(txId: string, fields: Pick<Rule, 'kind' | 'groupI
     const stale = (await db.rules.toArray()).filter(r => r.matchType === 'equals' && r.pattern.toLowerCase() === key)
     await db.rules.bulkDelete(stale.map(r => r.id))
     const rule: Rule = { id: crypto.randomUUID(), matchType: 'equals', pattern: tx.payee, createdAt: Date.now() }
+    const previous = stale.find(r => r.kind !== undefined)
     if (fields.kind !== undefined) rule.kind = fields.kind
+    else if (previous?.kind !== undefined) {
+      rule.kind = previous.kind
+      if (previous.kind === 'reimbursement' && previous.reimbursesGroupId !== undefined && fields.reimbursesGroupId === undefined) {
+        rule.reimbursesGroupId = previous.reimbursesGroupId
+      }
+    }
     if (fields.groupId !== undefined) rule.groupId = fields.groupId
     if (fields.reimbursesGroupId !== undefined) rule.reimbursesGroupId = fields.reimbursesGroupId
     await db.rules.add(rule)
@@ -45,11 +55,14 @@ async function setManual(txId: string, kind: TxKind, groupId: string | null, rei
 export async function setGroup(txId: string, groupId: string, applyToAll = true): Promise<void> {
   if (applyToAll) {
     // A groupId-only rule leaves the payee's credits/transfers alone (recategorise
-    // only gives groupId to computed expenses). `kind: 'expense'` is added only
-    // when explicitly converting a tx that is not currently an expense.
+    // only gives groupId to computed expenses). The shape is decided from the tx's
+    // state BEFORE upsertPayeeRule clears setManually: a manual tx's kind may be the
+    // user's override (rules might compute transfer/income for it), so a manual tx or
+    // a non-expense gets `kind: 'expense'` and stays an expense in the chosen group.
     const tx = await db.transactions.get(txId)
     if (!tx) throw new Error(`Transaction not found: ${txId}`)
-    return upsertPayeeRule(txId, tx.kind === 'expense' ? { groupId } : { kind: 'expense', groupId })
+    const needsKind = tx.setManually || tx.kind !== 'expense'
+    return upsertPayeeRule(txId, needsKind ? { kind: 'expense', groupId } : { groupId })
   }
   return setManual(txId, 'expense', groupId)
 }
