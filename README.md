@@ -11,7 +11,7 @@ A local-first budgeting app. Import your bank PDF statements, categorise transac
 
 ## Supported banks
 
-FNB and Discovery Bank PDF statements. Password-protected PDFs prompt for the password, which is never stored.
+FNB and Discovery Bank PDF statements. For FNB, both the official statement and the app / online banking "Transaction History" PDF are supported. Password-protected PDFs prompt for the password, which is never stored.
 
 ## Run locally
 

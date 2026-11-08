@@ -43,6 +43,7 @@ export default function ImportScreen() {
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [notices, setNotices] = useState<string[]>([])
   const [added, setAdded] = useState<number | null>(null)
+  const [override, setOverride] = useState(false)
 
   const mounted = useRef(true)
   const running = useRef(false)
@@ -94,6 +95,7 @@ export default function ImportScreen() {
       const p = await previewImport(parseStatement(items))
       if (!mounted.current) return
       setPreview(p)
+      setOverride(false)
       setStage('preview')
     } catch (e) {
       if (!mounted.current) return
@@ -148,6 +150,9 @@ export default function ImportScreen() {
     e.preventDefault()
     enqueue(e.dataTransfer.files)
   }
+
+  // A statement whose balances provably don't reconcile has misread amounts; don't import it silently.
+  const mismatch = !!preview?.accounts.some(a => a.balance.checked > 0 && !a.balance.ok)
 
   const uncategorised = (txs ?? []).filter(t => t.kind === 'expense' && (t.groupId === null || t.groupId === UNCATEGORISED)).length
 
@@ -218,7 +223,13 @@ export default function ImportScreen() {
               </div>
             )
           })}
-          <button type="button" disabled={busy} onClick={() => void doImport()}>Import</button>
+          {mismatch && (
+            <label>
+              <input type="checkbox" checked={override} onChange={e => setOverride(e.target.checked)} />
+              Import anyway: some amounts may be wrong
+            </label>
+          )}
+          <button type="button" disabled={busy || (mismatch && !override)} onClick={() => void doImport()}>Import</button>
           <button type="button" disabled={busy} onClick={() => void next()}>Skip</button>
         </section>
       )}

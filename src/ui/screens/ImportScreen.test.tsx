@@ -112,6 +112,20 @@ describe('ImportScreen', () => {
     expect(screen.getByText(/balance mismatch/i)).toBeInTheDocument()
   })
 
+  it('blocks importing a statement whose balances do not reconcile until explicitly overridden', async () => {
+    vi.mocked(extractTextItems).mockResolvedValue([])
+    const bad: ParsedStatement = { ...statement, accounts: [{ ...statement.accounts[0], rows: [row('2026-01-02', -100, 9900), row('2026-01-03', -200, 1)], closingBalance: undefined }] }
+    vi.mocked(parseStatement).mockReturnValue(bad)
+    setup()
+    upload(screen.getByLabelText(/choose pdf/i), pdf())
+    const btn = await screen.findByRole('button', { name: 'Import' })
+    expect(btn).toBeDisabled()
+    fireEvent.click(screen.getByLabelText(/import anyway/i))
+    expect(btn).toBeEnabled()
+    fireEvent.click(btn)
+    expect(await screen.findByText('Added 2 transactions')).toBeInTheDocument()
+  })
+
   it('ignores a double click on Import: one commit, one message', async () => {
     vi.mocked(extractTextItems).mockResolvedValue([])
     vi.mocked(parseStatement).mockReturnValue(statement)
