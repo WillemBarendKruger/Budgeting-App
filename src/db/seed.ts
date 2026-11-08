@@ -1,5 +1,6 @@
-import type { Group, MatchType, Rule, Settings } from '../domain/types'
+import type { Group, Settings } from '../domain/types'
 import { db } from './db'
+import { defaultRules } from './defaults'
 
 const GROUPS: [string, string, string][] = [
   ['home-rent', 'Home & rent', '#4e79a7'],
@@ -21,16 +22,6 @@ const GROUPS: [string, string, string][] = [
   ['uncategorised', 'Uncategorised', '#999999'],
 ]
 
-const RULES: [string, string][] = [
-  ['checkers|pick n pay|\\bpnp\\b|woolworths|\\bspar\\b', 'groceries'],
-  ['shell|engen|sasol|\\bbp\\b|total |petroport', 'transport-fuel'],
-  ['uber eats|\\bmcd|mcdonald|kfc|debonairs|romans|burger', 'eating-out'],
-  ['liquor|\\bpub\\b|\\btops\\b', 'alcohol'],
-  ['apple\\.com|steam|netflix|showmax|spotify', 'subscriptions'],
-  ['^#?service fees|monthly account fee|monthly facility fee|payment fee|byc debit', 'bank-fees'],
-  ['takealot|temu', 'shopping'],
-]
-
 export const DEFAULT_TRANSFER_PATTERNS = [
   'payment to credit card',
   'payment to discovery',
@@ -44,14 +35,7 @@ export async function seedIfEmpty(): Promise<void> {
   await db.transaction('rw', db.groups, db.rules, db.settings, async () => {
     if ((await db.groups.count()) > 0) return
     const groups: Group[] = GROUPS.map(([id, name, colour]) => ({ id, name, colour, hidden: false }))
-    const now = Date.now()
-    const rules: Rule[] = RULES.map(([pattern, groupId]) => ({
-      id: crypto.randomUUID(),
-      matchType: 'regex' as MatchType,
-      pattern,
-      groupId,
-      createdAt: now,
-    }))
+    const rules = defaultRules(Date.now())
     const settings: Settings = {
       id: 'settings',
       fallbackPayday: 25,

@@ -26,6 +26,39 @@ describe('cleanPayee', () => {
   })
 })
 
+describe('cleanPayee keeps one payee per merchant across months (FNB Transaction History)', () => {
+  const same = (a: string, b: string, expected: string) => {
+    expect(cleanPayee(a)).toBe(expected)
+    expect(cleanPayee(b)).toBe(expected)
+  }
+  it('drops underscore-joined debit order references', () => {
+    same('SOMECLUB _111111112_222222223', 'SOMECLUB _111111111_222222223', 'Someclub')
+  })
+  it('drops short alphanumeric reference codes', () => {
+    same('TRACKER 00ABC1234567 X12345', 'TRACKER 00ABC1234567 Y54321', 'Tracker')
+  })
+  it('drops the leading foreign/original amount on card purchases', () => {
+    same('20.99 APPLE.COM/BIL 123456*7890 12 MAR', '10.99 APPLE.COM/BIL 123456*7890 12 APR', 'Apple.com/bil')
+    expect(cleanPayee('450.00 HARBOUR GRILL 123456*7890 03 MAY')).toBe('Harbour Grill')
+  })
+  it('drops the "#" marker and embedded amounts from bank fee lines', () => {
+    same('#INT PYMT FEE-20.99 APPLE', '#INT PYMT FEE-10.99 APPLE', 'Int Pymt Fee Apple')
+    expect(cleanPayee('#MONTHLY ACCOUNT FEE')).toBe('Monthly Account Fee')
+  })
+  it('drops masked card numbers', () => {
+    expect(cleanPayee('STORECARD 1234****567890123456')).toBe('Storecard')
+  })
+  it('strips FNB app transfer prefixes', () => {
+    expect(cleanPayee('FNB APP TRANSFER FROM JANE')).toBe('Jane')
+    expect(cleanPayee('FNB APP GEO PAYMENT F JOHN SMITH')).toBe('John Smith')
+  })
+  it('leaves ordinary merchant names alone', () => {
+    expect(cleanPayee('ABCD.0012.03 RENT')).toBe('Abcd.0012.03 Rent')
+    expect(cleanPayee('CORNER CAFE CEL33')).toBe('Corner Cafe Cel33')
+    expect(cleanPayee('STEAKHOUSE CENTUR 26')).toBe('Steakhouse Centur 26')
+  })
+})
+
 describe('normaliseDescription', () => {
   it('lowercases and collapses whitespace', () => {
     expect(normaliseDescription('  Foo   BAR ')).toBe('foo bar')

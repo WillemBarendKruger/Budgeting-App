@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { ParsedRow, ParsedStatement } from '../domain/types'
 import { db } from './db'
+import { defaultRules } from './defaults'
 import { commitImport, importHash, previewImport, reapplyRules } from './importService'
 import { seedIfEmpty } from './seed'
 
@@ -25,7 +26,7 @@ describe('seed', () => {
     expect(await db.groups.count()).toBe(17)
     expect(await db.groups.get('uncategorised')).toBeTruthy()
     expect(new Set((await db.groups.toArray()).map((g) => g.colour)).size).toBe(17)
-    expect(await db.rules.count()).toBe(7)
+    expect(await db.rules.count()).toBe(defaultRules(0).length)
     expect((await db.settings.get('settings'))?.fallbackPayday).toBe(25)
   })
 
