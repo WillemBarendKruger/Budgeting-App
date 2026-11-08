@@ -1,6 +1,7 @@
 import type { Bank, ParsedStatement, TextItem } from '../domain/types'
 import { parseDiscovery } from './discovery'
 import { parseFnb } from './fnb'
+import { isFnbHistory, parseFnbHistory } from './fnbHistory'
 import { groupLines, lineText } from './layout'
 
 export class UnsupportedStatementError extends Error {
@@ -44,6 +45,6 @@ export function detectBank(items: TextItem[]): Bank | null {
 export function parseStatement(items: TextItem[]): ParsedStatement {
   const bank = detectBank(items)
   if (bank === 'discovery') return parseDiscovery(items)
-  if (bank === 'fnb') return parseFnb(items)
+  if (bank === 'fnb') return isFnbHistory(items) ? parseFnbHistory(items) : parseFnb(items)
   throw new UnsupportedStatementError()
 }
